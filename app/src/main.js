@@ -75,7 +75,7 @@ const SHRINK_AGAIN = 1500;
 let shrinkTimer = 0;
 let toldLong = false; // said once per task: reset when Sprout hides, is done or errors
 let small = false; // whether Sprout should be small when the pointer is not on it
-let pointer = null; // the cursor's last position (window points)
+let hovering = false; // Rust says when the cursor is on Sprout ("hover"), as for clicks
 let shownState = "";
 
 function setCompact(on) {
@@ -85,16 +85,15 @@ function setCompact(on) {
   }
 }
 
-function overSprout() {
-  if (!pointer) return false;
-  const b = sprout.bodyBox();
-  return pointer[0] >= b.x && pointer[0] <= b.x + b.w && pointer[1] >= b.y && pointer[1] <= b.y + b.h;
+function shrinkLater(ms) {
+  clearTimeout(shrinkTimer);
+  shrinkTimer = setTimeout(shrinkWhenFree, ms);
 }
 
 // Shrinks unless the pointer is on Sprout; then checks again a little later.
 function shrinkWhenFree() {
-  clearTimeout(shrinkTimer);
-  if (overSprout()) shrinkTimer = setTimeout(shrinkWhenFree, SHRINK_AGAIN);
+  if (!small) return;
+  if (hovering) shrinkLater(SHRINK_AGAIN);
   else setCompact(true);
 }
 
@@ -103,7 +102,7 @@ function goSmall() {
   if (toldLong) return shrinkWhenFree();
   toldLong = true;
   sprout.say(LONG_LINE, true, LONG_FOR, null);
-  shrinkTimer = setTimeout(shrinkWhenFree, LONG_FOR);
+  shrinkLater(LONG_FOR);
 }
 
 function compactFor(state) {
@@ -114,11 +113,12 @@ function compactFor(state) {
   else if (state !== "needs") toldLong = false;
 }
 
-// A click on the small form brings full Sprout back, like hovering.
-canvas.addEventListener("pointerdown", () => {
-  if (small) {
+// Hover (and so a click, which needs the pointer on it) brings full Sprout back.
+listen("hover", (event) => {
+  hovering = event.payload;
+  if (small && hovering) {
     setCompact(false);
-    shrinkTimer = setTimeout(shrinkWhenFree, SHRINK_AGAIN);
+    shrinkLater(SHRINK_AGAIN);
   }
 });
 
@@ -143,10 +143,4 @@ listen("blip-state", (event) => {
 listen("cursor", (event) => {
   const [x, y] = event.payload;
   sprout.lookAt(x, y);
-  pointer = [x, y];
-  if (small && overSprout()) {
-    setCompact(false);
-    clearTimeout(shrinkTimer);
-    shrinkTimer = setTimeout(shrinkWhenFree, SHRINK_AGAIN);
-  }
 });

@@ -258,6 +258,8 @@ function setState(s, fromDemo) {
   }
   S.state = s; S.realAge = 0;
   sprouts.forEach(sp => sp.setState(s));
+  // As in Blip, only working can be compact.
+  if (s !== 'working') setCompactButton(false);
   document.querySelectorAll('#states [data-s]').forEach(b => b.classList.toggle('on', b.dataset.s === s));
 }
 function spring(o, target, dt, k, z) {
@@ -757,9 +759,15 @@ states.insertAdjacentHTML('beforeend', '<span class="sep"></span><button id="dem
 document.getElementById('demo').onclick = () => demo ? stopDemo() : startDemo();
 // Compact working (Blip shrinks Sprout into this after a while in working): the bulb on a short stalk.
 states.insertAdjacentHTML('beforeend', '<button id="compact">Compact</button>');
-document.getElementById('compact').onclick = e => {
-  const on = e.currentTarget.classList.toggle('on');
+function setCompactButton(on) {
+  const b = document.getElementById('compact');
+  if (!b) return; // setState runs once before the buttons exist
+  b.classList.toggle('on', on);
   sprouts.forEach(sp => sp.setCompact(on));
+}
+document.getElementById('compact').onclick = e => {
+  if (S.state !== 'working') setState('working');
+  setCompactButton(!e.currentTarget.classList.contains('on'));
 };
 addEventListener('keydown', e => {
   if (e.target.matches('input, select')) return;

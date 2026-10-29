@@ -526,7 +526,8 @@
       } else if (S.streak === LINE_AT) say(lines[S.shown]);
       start();
     }
-    function setCompact(on) { S.compact = !!on; start(); }
+    // Shrinking closes the bubble, which would otherwise float beside the empty space.
+    function setCompact(on) { S.compact = !!on; if (on) hideBubble(); start(); }
     function lookAt(x, y) { S.mouse = { x, y }; S.mouseAt = performance.now(); }
 
     // Speech bubble: a small HTML element next to the canvas (text at canvas scale would be too small at 32 px).
@@ -602,6 +603,9 @@
 
     function frame(now) {
       raf = 0;
+      // Small and settled: 20 frames a second is plenty for a bulb that pulses every 5 s.
+      // (50 ms is the longest step dt allows, so the pulse keeps its time.)
+      if (S.compact && S.small.x > .99 && Math.abs(S.small.v) < .01 && now - last < 50) { raf = requestAnimationFrame(frame); return; }
       const dt = Math.min(.05, (now - last) / 1000); last = now;
       // Moving to a screen with another pixel density changes the ratio without any resize.
       if (Math.min(root.devicePixelRatio || 1, 3) !== dpr) resize();
@@ -699,7 +703,8 @@
           }
         }
         ctx.restore();
-        if (sm > .01) drawSmall(ctx, { ...st, alpha: alpha * sm }, bulbY + slide);
+        // Drawn as working whatever the state, so growing back into done shows no star on the bulb.
+        if (sm > .01) drawSmall(ctx, { ...st, state: 'working', alpha: alpha * sm }, bulbY + slide);
         // Birthday confetti, drawn outside the character's tilt and squash: pieces fall from above the head and fade out (left out with Reduce Motion).
         if (P.eggs && S.partyAge < EGGS.PARTY_MS / 1000 && !reduce) {
           const pa = S.partyAge;

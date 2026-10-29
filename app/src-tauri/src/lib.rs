@@ -151,10 +151,12 @@ fn handle(mut request: Request, app: AppHandle) {
 
 // While Sprout is shown: lets clicks reach the window only while the cursor
 // is over Sprout, and sends the cursor to the page ("cursor", window points)
-// when it moves, so the eyes follow it anywhere on screen.
+// when it moves, so the eyes follow it anywhere on screen. Tells the page when
+// the cursor comes onto or leaves Sprout ("hover"), for compact working.
 // Only asks the window to change when the answer changes.
 fn watch_cursor(window: tauri::WebviewWindow) {
     let mut ignoring = true;
+    let mut hovering = false;
     let mut last = None;
     loop {
         let shown = SHOWN.load(Ordering::Relaxed);
@@ -168,6 +170,10 @@ fn watch_cursor(window: tauri::WebviewWindow) {
         }
         last = cursor;
         let over = cursor.is_some_and(over_sprout);
+        if over != hovering {
+            hovering = over;
+            let _ = window.emit("hover", over);
+        }
         if over == ignoring && window.set_ignore_cursor_events(!over).is_ok() {
             ignoring = !over;
             eprintln!("blip: clicks {}", if over { "on" } else { "off" });
