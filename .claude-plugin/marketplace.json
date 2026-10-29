@@ -1,0 +1,14 @@
+{
+  "name": "blip-notification",
+  "description": "Blip: a small character at the top of your screen that tells you when Claude Code is done, needs you, or hit an error",
+  "owner": {
+    "name": "Mohamed"
+  },
+  "plugins": [
+    {
+      "name": "blip",
+      "source": "./hooks",
+      "description": "Sends Claude Code's events to the Blip app on your computer (127.0.0.1 only)"
+    }
+  ]
+}

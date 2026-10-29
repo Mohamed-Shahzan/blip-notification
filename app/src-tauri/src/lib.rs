@@ -458,14 +458,15 @@ fn now() -> f64 {
 }
 
 // Appends one line to logs/received.jsonl in the repo, for step 3's tests.
-// Dev builds only: the path is this repo on the machine that built Blip, and
-// the log holds prompts and code (logs/ is never committed).
+// Dev builds only, and only with BLIP_LOG=1 set where Blip starts: the log
+// holds prompts and code, so someone who installed Blip from the README never
+// gets one (logs/ is never committed either).
 #[cfg(debug_assertions)]
 mod received_log {
     use std::fs::{self, File, OpenOptions};
     use std::io::Write;
     use std::path::Path;
-    use std::sync::Mutex;
+    use std::sync::{Mutex, OnceLock};
 
     // Opened once. One writer at a time, so two events never mix their lines.
     static LOG: Mutex<Option<File>> = Mutex::new(None);
@@ -473,6 +474,10 @@ mod received_log {
     const MAX_LOG: u64 = 20 * 1024 * 1024;
 
     pub fn record(line: serde_json::Value) {
+        static ON: OnceLock<bool> = OnceLock::new();
+        if !*ON.get_or_init(|| std::env::var("BLIP_LOG").is_ok_and(|v| v == "1")) {
+            return;
+        }
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../logs");
         let path = dir.join("received.jsonl");
         let Ok(mut log) = LOG.lock() else {
