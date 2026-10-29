@@ -34,9 +34,11 @@ const NAMES = { needs_you: "needs" };
 const SPEAKS = ["needs", "done", "error"];
 const SPEAK_FOR = 6000;
 // Several permissions in a row flip needs you and working back and forth;
-// the same line again this soon stays unsaid.
+// the same line with the same snippet again this soon stays unsaid.
 const REPEAT_GAP = 10000;
-let spoke = { state: "", at: -Infinity };
+let spoke = { state: "", text: null, at: -Infinity };
+// The latest snippet from Rust, so a right-click can redraw the bubble with or without it.
+let lastText = null;
 
 // The message snippet under the line (PRD Level 1). Right-click Sprout hides or
 // shows it; the choice is kept between launches.
@@ -51,18 +53,27 @@ canvas.addEventListener("contextmenu", (e) => {
   try {
     localStorage.setItem(SHOW_TEXT, showText ? "on" : "off");
   } catch {}
-  sprout.say(showText ? "Message text on" : "Message text off", true, 1500, null);
+  // In a state with a line, show it again with the snippet added or taken away;
+  // otherwise say what changed.
+  if (SPEAKS.includes(sprout.state)) speak();
+  else sprout.say(showText ? "Message text on" : "Message text off", true, 1500, null);
 });
+
+function speak() {
+  sprout.say(sprout.line, true, SPEAK_FOR, showText ? lastText : null);
+}
 
 listen("blip-state", (event) => {
   const { text } = event.payload;
   const state = NAMES[event.payload.state] || event.payload.state;
+  lastText = text;
   sprout.setState(state);
   const now = performance.now();
-  if (state === "hidden") spoke = { state: "", at: -Infinity };
-  if (SPEAKS.includes(state) && !(spoke.state === state && now - spoke.at < REPEAT_GAP)) {
-    sprout.say(sprout.line, true, SPEAK_FOR, showText ? text : null);
-    spoke = { state, at: now };
+  if (state === "hidden") spoke = { state: "", text: null, at: -Infinity };
+  const repeat = spoke.state === state && spoke.text === text && now - spoke.at < REPEAT_GAP;
+  if (SPEAKS.includes(state) && !repeat) {
+    speak();
+    spoke = { state, text, at: now };
   }
   sendBox();
 });

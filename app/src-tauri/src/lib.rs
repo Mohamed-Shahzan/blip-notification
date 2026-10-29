@@ -204,7 +204,7 @@ fn machine(app: &AppHandle) -> MutexGuard<'_, state::Machine> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-// Feeds one event (or none, for the timer) and tells the page if the state changed.
+// Feeds one event (or none, for the timer) and tells the page if the state or its snippet changed.
 fn update_state(app: &AppHandle, event: Option<state::Event>) {
     let mut machine = machine(app);
     let now = now();
@@ -214,17 +214,14 @@ fn update_state(app: &AppHandle, event: Option<state::Event>) {
             thread.unpark();
         }
     }
-    if let Some(state) = machine.changed(now) {
-        eprintln!("blip: state {state:?}");
-        SHOWN.store(state != state::State::Hidden, Ordering::Relaxed);
+    if let Some(shown) = machine.changed(now) {
+        // Only the state: the snippet is the user's text and stays out of the log.
+        eprintln!("blip: state {:?}", shown.state);
+        SHOWN.store(shown.state != state::State::Hidden, Ordering::Relaxed);
         if let Some(thread) = CURSOR_THREAD.get() {
             thread.unpark();
         }
-        let text = machine.text(now);
-        let _ = app.emit(
-            "blip-state",
-            serde_json::json!({ "state": state, "text": text }),
-        );
+        let _ = app.emit("blip-state", shown);
     }
 }
 

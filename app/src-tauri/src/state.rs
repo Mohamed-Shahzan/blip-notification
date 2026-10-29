@@ -164,7 +164,14 @@ impl Event {
 pub struct Machine {
     sessions: HashMap<String, Session>,
     ended: VecDeque<String>,
-    shown: State,
+    shown: Shown,
+}
+
+// What the page gets: the state and the snippet under Sprout's line.
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct Shown {
+    pub state: State,
+    pub text: Option<String>,
 }
 
 #[derive(Default)]
@@ -179,6 +186,8 @@ struct Session {
     subagent_asks: Vec<Ask>,
     outcome: Outcome,
     ended_at: f64,
+    // When the latest question or permission came, to pick the newest when sessions tie.
+    asked_at: f64,
     // The snippet of how the last turn ended.
     text: Option<String>,
 }
@@ -212,7 +221,10 @@ impl Machine {
         if let Some(agent) = event.agent {
             let before = s.subagent_asks.len();
             match event.kind {
-                Kind::Asks(ask) => s.subagent_asks.push(ask),
+                Kind::Asks(ask) => {
+                    s.subagent_asks.push(ask);
+                    s.asked_at = now;
+                }
                 Kind::ToolDone(ask) => remove_one(&mut s.subagent_asks, &ask),
                 // A denied or cancelled subagent never sends PostToolUse, but it does stop.
                 Kind::SubagentEnd => s.subagent_asks.retain(|a| a.agent.as_ref() != Some(&agent)),
@@ -266,7 +278,10 @@ impl Machine {
         }
         match event.kind {
             Kind::Prompt(self_started) => s.self_started = self_started,
-            Kind::Asks(ask) => s.asks.push(ask),
+            Kind::Asks(ask) => {
+                s.asks.push(ask);
+                s.asked_at = now;
+            }
             Kind::ToolDone(ask) => remove_one(&mut s.asks, &ask),
             Kind::TurnEnd(end) => {
                 s.running = false;
@@ -313,7 +328,12 @@ impl Machine {
     // What Sprout's bubble says under the state line: from the session that decides
     // the state, what it asks (needs you) or how its turn ended (done, error).
     pub fn text(&self, now: f64) -> Option<String> {
-        let s = self.sessions.values().max_by_key(|s| s.state(now))?;
+        // Among sessions in the same state, the one that got there last.
+        let s = self.sessions.values().max_by(|a, b| {
+            let (sa, sb) = (a.state(now), b.state(now));
+            sa.cmp(&sb)
+                .then(a.changed_at(sa).total_cmp(&b.changed_at(sb)))
+        })?;
         match s.state(now) {
             State::NeedsYou => s.subagent_asks.iter().chain(&s.asks).last().map(Ask::text),
             State::Done | State::Error => s.text.clone(),
@@ -331,17 +351,29 @@ impl Machine {
             .min_by(f64::total_cmp)
     }
 
-    // The new state if it differs from the last one shown.
-    pub fn changed(&mut self, now: f64) -> Option<State> {
-        let state = self.state(now);
-        (state != self.shown).then(|| {
-            self.shown = state;
-            state
+    // What to show, if the state or its snippet differs from what was shown last.
+    pub fn changed(&mut self, now: f64) -> Option<Shown> {
+        let shown = Shown {
+            state: self.state(now),
+            text: self.text(now),
+        };
+        (shown != self.shown).then(|| {
+            self.shown = shown.clone();
+            shown
         })
     }
 }
 
 impl Session {
+    // When the session reached this state: its latest ask, or the end of its turn.
+    fn changed_at(&self, state: State) -> f64 {
+        if state == State::NeedsYou {
+            self.asked_at
+        } else {
+            self.ended_at
+        }
+    }
+
     fn state(&self, now: f64) -> State {
         if !self.subagent_asks.is_empty() || !self.asks.is_empty() {
             return State::NeedsYou;
@@ -374,15 +406,20 @@ impl Ask {
 }
 
 // The first line with words in it, without Markdown marks, cut to SNIPPET characters.
+// Only marks are removed: a heading or quote start, a list bullet, bold and code quotes.
+// A single "_" or "*" stays, since it is often part of a name ("update_state") or a sum.
 fn snippet(message: &str) -> Option<String> {
     let line = message
         .lines()
-        .map(|l| l.trim().trim_start_matches(['#', '>', '-', '*', ' ']))
+        .map(|l| {
+            let l = l.trim().trim_start_matches(['#', '>', ' ']);
+            ["- ", "* ", "+ "]
+                .iter()
+                .find_map(|bullet| l.strip_prefix(bullet))
+                .unwrap_or(l)
+        })
         .find(|l| l.chars().any(char::is_alphanumeric))?;
-    let line: String = line
-        .chars()
-        .filter(|c| !matches!(c, '*' | '`' | '_'))
-        .collect();
+    let line = line.replace("**", "").replace("__", "").replace('`', "");
     let line = line.split_whitespace().collect::<Vec<_>>().join(" ");
     Some(match line.char_indices().nth(SNIPPET) {
         Some((cut, _)) => format!("{}…", line[..cut].trim_end()),
@@ -533,14 +570,14 @@ mod tests {
     fn done_hides_after_five_seconds() {
         let mut m = Machine::default();
         feed(&mut m, "hook", hook("UserPromptSubmit", "s", "p"), 0.0);
-        assert_eq!(m.changed(0.0), Some(State::Working));
+        assert_eq!(m.changed(0.0).map(|s| s.state), Some(State::Working));
         feed(&mut m, "hook", hook("Stop", "s", "p"), 10.0);
         assert_eq!(m.next_change(10.0), Some(10.0 + SETTLE));
-        assert_eq!(m.changed(10.0), None);
-        assert_eq!(m.changed(10.25), Some(State::Done));
+        assert_eq!(m.changed(10.0).map(|s| s.state), None);
+        assert_eq!(m.changed(10.25).map(|s| s.state), Some(State::Done));
         assert_eq!(m.next_change(10.25), Some(10.0 + SETTLE + DONE_FOR));
-        assert_eq!(m.changed(15.1), None);
-        assert_eq!(m.changed(15.25), Some(State::Hidden));
+        assert_eq!(m.changed(15.1).map(|s| s.state), None);
+        assert_eq!(m.changed(15.25).map(|s| s.state), Some(State::Hidden));
         assert_eq!(m.next_change(15.25), None);
     }
 
@@ -660,6 +697,39 @@ mod tests {
     }
 
     #[test]
+    fn snippets_keep_names_and_signs() {
+        let keep = "-1 test left in update_state, 2*3 cases";
+        assert_eq!(snippet(keep).as_deref(), Some(keep));
+        assert_eq!(snippet("- **Item** one").as_deref(), Some("Item one"));
+        assert_eq!(snippet("> # Quote").as_deref(), Some("Quote"));
+    }
+
+    #[test]
+    fn a_new_snippet_is_shown_even_when_the_state_stays() {
+        let mut m = Machine::default();
+        let mut ask = hook("PermissionRequest", "s1", "p1");
+        ask["tool_name"] = json!("Bash");
+        feed(&mut m, "hook", hook("UserPromptSubmit", "s1", "p1"), 0.0);
+        feed(&mut m, "hook", ask, 0.0);
+        assert_eq!(
+            m.changed(0.0).unwrap().text.as_deref(),
+            Some("Wants to use Bash")
+        );
+        // Another session asks while the first still waits: same state, its text wins.
+        let mut question = hook("PermissionRequest", "s2", "q1");
+        question["tool_name"] = json!("AskUserQuestion");
+        question["tool_input"] = json!({ "questions": [{ "question": "Which one?" }] });
+        feed(&mut m, "hook", hook("UserPromptSubmit", "s2", "q1"), 1.0);
+        feed(&mut m, "hook", question, 1.0);
+        let shown = m.changed(1.0).unwrap();
+        assert_eq!(
+            (shown.state, shown.text.as_deref()),
+            (State::NeedsYou, Some("Which one?"))
+        );
+        assert_eq!(m.changed(1.0), None);
+    }
+
+    #[test]
     fn other_messages_are_ignored() {
         assert_eq!(
             translate(
@@ -741,13 +811,13 @@ mod tests {
         // CLI: Stop first, the mod's "aborted" up to one inbox poll later.
         let mut m = Machine::default();
         feed(&mut m, "hook", hook("UserPromptSubmit", "s", "p"), 0.0);
-        assert_eq!(m.changed(0.0), Some(State::Working));
+        assert_eq!(m.changed(0.0).map(|s| s.state), Some(State::Working));
         feed(&mut m, "hook", hook("Stop", "s", "p"), 10.0);
-        assert_eq!(m.changed(10.0), None);
+        assert_eq!(m.changed(10.0).map(|s| s.state), None);
         let esc =
             json!({ "kind": "turn.complete", "session": "s", "reason": "aborted", "ts": 10.05 });
         feed(&mut m, "mod", esc, 10.1);
-        assert_eq!(m.changed(10.1), Some(State::Hidden));
+        assert_eq!(m.changed(10.1).map(|s| s.state), Some(State::Hidden));
         assert_eq!(m.next_change(10.1), None);
     }
 
