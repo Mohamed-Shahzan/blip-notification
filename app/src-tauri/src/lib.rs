@@ -5,11 +5,13 @@
 
 mod state;
 
+use serde::Deserialize;
 use std::collections::HashSet;
 use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -34,6 +36,22 @@ const ALIVE_CHECK: f64 = 15.0;
 
 // The state thread, woken after each event so it can plan its next wake.
 static STATE_THREAD: OnceLock<thread::Thread> = OnceLock::new();
+
+// Click-through: the window ignores the mouse except over Sprout's body.
+// The page sends that box ("sprout-box", in window points); the cursor loop
+// checks it about 30 times a second while Sprout is shown, and only then.
+static SHOWN: AtomicBool = AtomicBool::new(false);
+static SPROUT_BOX: Mutex<Option<HitBox>> = Mutex::new(None);
+const CURSOR_POLL: Duration = Duration::from_millis(33);
+const CURSOR_IDLE: Duration = Duration::from_millis(200);
+
+#[derive(Clone, Copy, Deserialize)]
+struct HitBox {
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -68,6 +86,13 @@ pub fn run() {
             let handle = app.handle().clone();
             let thread = thread::spawn(move || watch_state(handle));
             let _ = STATE_THREAD.set(thread.thread().clone());
+
+            app.listen("sprout-box", |event| {
+                if let Ok(hit) = serde_json::from_str::<HitBox>(event.payload()) {
+                    *SPROUT_BOX.lock().unwrap_or_else(|p| p.into_inner()) = Some(hit);
+                }
+            });
+            thread::spawn(move || watch_cursor(window));
             Ok(())
         })
         .run(tauri::generate_context!())
@@ -127,6 +152,38 @@ fn handle(mut request: Request, app: AppHandle) {
     update_state(&app, event);
 }
 
+// Lets clicks reach the window only while the cursor is over Sprout.
+// Only asks the window to change when the answer changes.
+fn watch_cursor(window: tauri::WebviewWindow) {
+    let mut ignoring = true;
+    loop {
+        let over = SHOWN.load(Ordering::Relaxed) && cursor_over_sprout(&window).unwrap_or(false);
+        if over == ignoring && window.set_ignore_cursor_events(!over).is_ok() {
+            ignoring = !over;
+            eprintln!("blip: clicks {}", if over { "on" } else { "off" });
+        }
+        thread::sleep(if SHOWN.load(Ordering::Relaxed) {
+            CURSOR_POLL
+        } else {
+            CURSOR_IDLE
+        });
+    }
+}
+
+fn cursor_over_sprout(window: &tauri::WebviewWindow) -> tauri::Result<bool> {
+    let Some(hit) = *SPROUT_BOX.lock().unwrap_or_else(|p| p.into_inner()) else {
+        return Ok(false);
+    };
+    // Cursor and window are both in physical pixels from the main screen's
+    // top-left; the box is in points, so scale it.
+    let cursor = window.cursor_position()?;
+    let origin = window.outer_position()?;
+    let scale = window.scale_factor()?;
+    let x = (cursor.x - origin.x as f64) / scale;
+    let y = (cursor.y - origin.y as f64) / scale;
+    Ok(x >= hit.x && x <= hit.x + hit.w && y >= hit.y && y <= hit.y + hit.h)
+}
+
 fn machine(app: &AppHandle) -> MutexGuard<'_, state::Machine> {
     app.state::<Mutex<state::Machine>>()
         .inner()
@@ -146,6 +203,7 @@ fn update_state(app: &AppHandle, event: Option<state::Event>) {
     }
     if let Some(state) = machine.changed(now) {
         eprintln!("blip: state {state:?}");
+        SHOWN.store(state != state::State::Hidden, Ordering::Relaxed);
         let _ = app.emit("blip-state", state);
     }
 }
