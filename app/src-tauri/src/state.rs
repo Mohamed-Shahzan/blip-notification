@@ -365,7 +365,10 @@ impl Ask {
         let question = input["questions"][0]["question"].as_str();
         match question.and_then(snippet) {
             Some(q) if self.tool == "AskUserQuestion" => q,
-            _ => format!("Wants to use {}", self.tool.rsplit("__").next().unwrap_or(&self.tool)),
+            _ => format!(
+                "Wants to use {}",
+                self.tool.rsplit("__").next().unwrap_or(&self.tool)
+            ),
         }
     }
 }
@@ -376,7 +379,10 @@ fn snippet(message: &str) -> Option<String> {
         .lines()
         .map(|l| l.trim().trim_start_matches(['#', '>', '-', '*', ' ']))
         .find(|l| l.chars().any(char::is_alphanumeric))?;
-    let line: String = line.chars().filter(|c| !matches!(c, '*' | '`' | '_')).collect();
+    let line: String = line
+        .chars()
+        .filter(|c| !matches!(c, '*' | '`' | '_'))
+        .collect();
     let line = line.split_whitespace().collect::<Vec<_>>().join(" ");
     Some(match line.char_indices().nth(SNIPPET) {
         Some((cut, _)) => format!("{}…", line[..cut].trim_end()),

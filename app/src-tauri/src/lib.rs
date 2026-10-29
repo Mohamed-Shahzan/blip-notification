@@ -221,7 +221,10 @@ fn update_state(app: &AppHandle, event: Option<state::Event>) {
             thread.unpark();
         }
         let text = machine.text(now);
-        let _ = app.emit("blip-state", serde_json::json!({ "state": state, "text": text }));
+        let _ = app.emit(
+            "blip-state",
+            serde_json::json!({ "state": state, "text": text }),
+        );
     }
 }
 
