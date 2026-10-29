@@ -11,7 +11,12 @@ canvas.style.width = box.width + "px";
 canvas.style.height = box.height + "px";
 // pointer: false, since the page only sees the mouse over Sprout itself. Rust
 // sends the cursor from anywhere on screen instead ("cursor", window points).
-const sprout = BlipSprout.create(canvas, { size: SIZE, bubbleBeside: true, pointer: false });
+const sprout = BlipSprout.create(canvas, {
+  size: SIZE,
+  bubbleBeside: true,
+  pointer: false,
+  settings: { lookRange: 1.75 }, // eyes travel further than the default (Mohamed, 29 Oct)
+});
 
 // Tell Rust where Sprout's body is (window points), so clicks only land there.
 // The body is centred at 60% of the canvas height; the box adds the antenna.

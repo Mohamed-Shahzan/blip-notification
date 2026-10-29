@@ -55,7 +55,7 @@
   // The Sprout subset of the playground settings, with the defaults agreed on 29 Oct (Vivid, outline 0.9).
   const DEFAULTS = {
     round: .6, squash: .5, hue: 0, sat: 100, glow: .5, outline: .9, backing: 0,
-    eyeSize: 1, eyeGap: 1, eyeStyle: 'auto', mouth: true, follow: true,
+    eyeSize: 1, eyeGap: 1, eyeStyle: 'auto', mouth: true, follow: true, lookRange: 1,
     speed: 1, bounce: 1, trans: .35, blinkEvery: 3.5,
     mBlink: true, mRead: true, mError: true, mDone: true, mContact: true, mChange: true, mGlance: true, mHand: true,
     eggs: true, // the five easter eggs (see EGGS below)
@@ -64,7 +64,7 @@
   // Allowed ranges, the same as the playground sliders. Out-of-range numbers are clamped, other values ignored.
   const RANGES = {
     round: [0, 1], squash: [0, 1], hue: [-180, 180], sat: [0, 150], glow: [0, 1], outline: [0, 1], backing: [0, 1],
-    eyeSize: [.5, 1.8], eyeGap: [.6, 1.6], speed: [.3, 2.5], bounce: [0, 2], trans: [.1, 1.2], blinkEvery: [1, 8]
+    eyeSize: [.5, 1.8], eyeGap: [.6, 1.6], lookRange: [.5, 3], speed: [.3, 2.5], bounce: [0, 2], trans: [.1, 1.2], blinkEvery: [1, 8]
   };
   const hexColour = v => {
     if (typeof v !== 'string') return null;
@@ -592,7 +592,8 @@
       if (S.mouse && (!rect || now - rectAt > 500)) { rect = canvas.getBoundingClientRect(); rectAt = now; }
       if (P.follow && S.mouse) {
         const dx = S.mouse.x - (rect.left + cw / 2), dy = S.mouse.y - (rect.top + cy), d = Math.hypot(dx, dy);
-        if (d > 1) { const f = Math.min(1, d / 250); tx = dx / d * f * 3.2; ty = dy / d * f * 2.6; }
+        // lookRange scales how far the eyes travel (1 = 3.2 units sideways, 2.6 up and down).
+        if (d > 1) { const f = Math.min(1, d / 250) * P.lookRange; tx = dx / d * f * 3.2; ty = dy / d * f * 2.6; }
       }
       S.look.x += (tx - S.look.x) * .18; S.look.y += (ty - S.look.y) * .18;
       // Fed up: on while the clicks keep coming; when they stop the antenna springs back with a "phew".
