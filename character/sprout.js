@@ -17,6 +17,9 @@
 //                                 // opts.bubbleBeside puts it beside the body instead of above the head
 //   sprout.say(text, announce, hold, detail);  // detail: a smaller grey line under it, cut with "…" when long
 //   sprout.line                   // the current state's line ("All done!"...), for a host that says it on a change
+//   sprout.setCompact(true);      // shrink into the small form (the antenna bulb on a short stalk, a slow ripple
+//                                 // every 5 s), false grows back; opts.compactTop: where the stalk hangs from, in
+//                                 // CSS pixels from the canvas top (Blip: the window's top edge)
 //   sprout.update(settings);      // change some settings live; the rest keep their values
 //   Options for testing the easter eggs: opts.luck (chance of a lucky leaf per done), opts.date (a function
 //   returning the Date to use).
@@ -105,6 +108,8 @@
   const UNITS_PER_SIZE = 75;
   const BOX = { rx: 40, ry: 46, cy: -4 };
   const BUBBLE_TIME = 2.2;
+  // Compact form: the stalk's length and the sign of life's period, in drawing units and seconds.
+  const STALK = 12, PULSE = 5;
   // Click ladder. Clicks count as one streak while each comes within STREAK_GAP ms of the last:
   // 3 clicks say what Sprout is doing; from 6 on it is fed up (tired eyes, antenna flopped over) until the
   // clicks stop for FED_HOLD ms.
@@ -365,6 +370,18 @@
     mouth(ctx, st, { y: 19, w: 8, ink: INK });
   }
 
+  // The compact form: a short stalk from above and the bulb at y. Every PULSE seconds the bulb brightens
+  // and a ripple spreads, a slow sign of life (the full Sprout's working light comes about every second).
+  function drawSmall(ctx, st, y) {
+    const c = st.col, ph = st.t % PULSE, rim = rimColour(c, st.P.outline);
+    const flash = ph < .4 ? Math.sin(ph / .4 * Math.PI) : 0, ripple = ph < 1.2 ? ph / 1.2 : -1;
+    ctx.save(); ctx.globalAlpha = st.alpha;
+    ctx.strokeStyle = rimColour(c, 1); ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(0, y - 6.5 - STALK); ctx.lineTo(0, y - 6); ctx.stroke();
+    ctx.restore();
+    drawBulb(ctx, st, 0, y, flash, st.reduce ? -1 : ripple, .6 + .4 * flash, rim, st.night);
+  }
+
   // The antenna bulb at (ex, ey): done star, working ripple, then the bulb with its rim and shine.
   function drawBulb(ctx, st, ex, ey, flash, ripple, bulbAlpha, rim, night) {
     const P = st.P, c = st.col, t = st.t, s = st.state;
@@ -418,7 +435,7 @@
       state: 'hidden', shown: 'working', age: 0, t: 0, blend: 1, blinkClock: 1.2, blinkFactor: 1, double: false,
       pokeAge: 9, bubbleAge: 9, streak: 0, leafOn: false, luckyUntil: 0, leaf: { x: 0, v: 0 }, doneRun: 0, rollUntil: 0, roll: { x: 0, v: 0 }, partyAge: 9, partyDay: '', holdAt: 0, hour: 12, hourAt: -1e9, lastClick: -1e9, fedUntil: 0, fed: { x: 0, v: 0 }, phewAge: 9, changeAge: 9, attend: 0, mouseAt: -1e9,
       read: { i: 0, clock: 0, x: 0, y: 0, tx: 0, ty: 0 }, glanceAge: 9, glanceIn: 6,
-      vis: { x: 0, v: 0 }, hand: { x: 0, v: 0 },
+      vis: { x: 0, v: 0 }, hand: { x: 0, v: 0 }, small: { x: 0, v: 0 }, compact: false,
       look: { x: 0, y: 0 }, mouse: null, col: [79, 140, 255], colFrom: [79, 140, 255]
     };
     let raf = 0, last = 0, cw = 0, ch = 0, dpr = 1, rect = null, rectAt = 0;
@@ -443,6 +460,11 @@
     // a little wider than the body for the raised hand.
     function bodyBox() {
       const r = canvas.getBoundingClientRect(), u = drawPx() / UNITS_PER_SIZE;
+      // Compact: the stalk and bulb, padded so the pointer finds it easily.
+      if (S.compact) {
+        const pad = 8, half = 7 * u + pad, top = r.top + (opts.compactTop || 0);
+        return { x: r.left + cw / 2 - half, y: top, w: half * 2, h: (STALK + 14) * u + pad };
+      }
       const top = BOX.cy - BOX.ry - 14 - 21 * P.bounce, bottom = BOX.cy + BOX.ry, half = BOX.rx + 5;
       return { x: r.left + cw / 2 - half * u, y: r.top + ch * .6 + top * u, w: half * 2 * u, h: (bottom - top) * u };
     }
@@ -504,6 +526,7 @@
       } else if (S.streak === LINE_AT) say(lines[S.shown]);
       start();
     }
+    function setCompact(on) { S.compact = !!on; start(); }
     function lookAt(x, y) { S.mouse = { x, y }; S.mouseAt = performance.now(); }
 
     // Speech bubble: a small HTML element next to the canvas (text at canvas scale would be too small at 32 px).
@@ -600,6 +623,7 @@
 
       const w = 4 / P.trans, k = w * w, hidden = S.state === 'hidden';
       spring(S.vis, hidden ? 0 : 1, dt, k, hidden ? .9 : .5);
+      spring(S.small, S.compact && !hidden ? 1 : 0, dt, k, .8);
       const np = needsPhase(S.age);
       spring(S.hand, !hidden && S.shown === 'needs' && P.mHand && np.handUp && S.fed.x < .5 ? 1 : 0, dt, k, .4);
       S.blend = Math.min(1, S.blend + dt / P.trans);
@@ -652,7 +676,10 @@
         };
         const m = motion(st);
         ctx.setTransform(kpx, 0, 0, kpx, cw * dpr / 2, cy * dpr);
-        ctx.save(); ctx.translate(m.x, m.y + slide); ctx.rotate(m.rot); ctx.globalAlpha = alpha;
+        // Compact: the body shrinks up into the bulb and fades; the bulb hangs where the stalk starts.
+        const sm = clamp(S.small.x, 0, 1), bulbY = ((opts.compactTop || 0) - cy) / scale + STALK + 6.5;
+        ctx.save(); ctx.translate(m.x * (1 - sm), lerp(m.y, bulbY, sm) + slide); ctx.rotate(m.rot * (1 - sm));
+        ctx.globalAlpha = alpha * clamp(1 - sm * 1.4, 0, 1); ctx.scale(1 - .8 * sm, 1 - .8 * sm);
         // Same size in every state; needs you starts with a short grow-and-settle pop.
         const pop = S.shown === 'needs' && S.age < .45 ? 1 + (reduce ? .04 : .12) * Math.sin(S.age / .45 * Math.PI) : 1;
         const s = (reduce ? 1 : .75 + .25 * v) * pop; ctx.scale(s, s);
@@ -662,7 +689,7 @@
           rrect(ctx, -BOX.rx - pad, BOX.cy - BOX.ry - pad, (BOX.rx + pad) * 2, (BOX.ry + pad) * 2, Math.min(BOX.rx, BOX.ry) * .6 + pad);
           ctx.fill();
         }
-        ctx.save(); drawSprout(ctx, st, m); ctx.restore();
+        if (sm < .99) { ctx.save(); drawSprout(ctx, st, m); ctx.restore(); }
         if (S.pokeAge < .6 && (S.shown === 'done' || S.shown === 'needs')) {
           const p = S.pokeAge / .6, c = st.col;
           ctx.fillStyle = rgba(shade(c, .6)); glow(ctx, st, c, 5);
@@ -672,6 +699,7 @@
           }
         }
         ctx.restore();
+        if (sm > .01) drawSmall(ctx, { ...st, alpha: alpha * sm }, bulbY + slide);
         // Birthday confetti, drawn outside the character's tilt and squash: pieces fall from above the head and fade out (left out with Reduce Motion).
         if (P.eggs && S.partyAge < EGGS.PARTY_MS / 1000 && !reduce) {
           const pa = S.partyAge;
@@ -696,10 +724,11 @@
     if (opts.handlePress !== false) for (const ev in POINTER) canvas.addEventListener(ev, POINTER[ev]);
 
     return {
-      setState, poke, press, release, cancel, lookAt, say, bodyBox,
+      setState, setCompact, poke, press, release, cancel, lookAt, say, bodyBox,
       // Changes only the settings given; the rest keep their current values.
       update(settings) { P = merge(P, settings); start(); },
       get state() { return S.state; },
+      get compact() { return S.compact; },
       get line() { return lines[S.shown]; },
       get running() { return raf !== 0; },
       destroy() {

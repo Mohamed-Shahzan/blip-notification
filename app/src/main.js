@@ -16,6 +16,7 @@ const sprout = BlipSprout.create(canvas, {
   bubbleBeside: true,
   pointer: false,
   settings: { lookRange: 1.75 }, // eyes travel further than the default (Mohamed, 29 Oct)
+  compactTop: 34, // the window's top edge: the canvas is raised 34 px in styles.css
 });
 
 // Tell Rust where Sprout's body is (window points), so clicks only land there.
@@ -63,11 +64,72 @@ function speak() {
   sprout.say(sprout.line, true, SPEAK_FOR, showText ? lastText : null);
 }
 
+// Compact working (Mohamed, 30 Oct): after SHRINK_AFTER in Working, Sprout says
+// LONG_LINE once at full size and shrinks into its bulb when the bubble closes.
+// The pointer on it brings full Sprout back; off it for SHRINK_AGAIN, it shrinks again.
+// Any other state is always full size.
+const SHRINK_AFTER = 20000;
+const LONG_LINE = "This will take a while. I'll tell you when it's done.";
+const LONG_FOR = 4000;
+const SHRINK_AGAIN = 1500;
+let shrinkTimer = 0;
+let toldLong = false; // said once per task: reset when Sprout hides, is done or errors
+let small = false; // whether Sprout should be small when the pointer is not on it
+let pointer = null; // the cursor's last position (window points)
+let shownState = "";
+
+function setCompact(on) {
+  if (sprout.compact !== on) {
+    sprout.setCompact(on);
+    sendBox();
+  }
+}
+
+function overSprout() {
+  if (!pointer) return false;
+  const b = sprout.bodyBox();
+  return pointer[0] >= b.x && pointer[0] <= b.x + b.w && pointer[1] >= b.y && pointer[1] <= b.y + b.h;
+}
+
+// Shrinks unless the pointer is on Sprout; then checks again a little later.
+function shrinkWhenFree() {
+  clearTimeout(shrinkTimer);
+  if (overSprout()) shrinkTimer = setTimeout(shrinkWhenFree, SHRINK_AGAIN);
+  else setCompact(true);
+}
+
+function goSmall() {
+  small = true;
+  if (toldLong) return shrinkWhenFree();
+  toldLong = true;
+  sprout.say(LONG_LINE, true, LONG_FOR, null);
+  shrinkTimer = setTimeout(shrinkWhenFree, LONG_FOR);
+}
+
+function compactFor(state) {
+  clearTimeout(shrinkTimer);
+  small = false;
+  setCompact(false);
+  if (state === "working") shrinkTimer = setTimeout(goSmall, SHRINK_AFTER);
+  else if (state !== "needs") toldLong = false;
+}
+
+// A click on the small form brings full Sprout back, like hovering.
+canvas.addEventListener("pointerdown", () => {
+  if (small) {
+    setCompact(false);
+    shrinkTimer = setTimeout(shrinkWhenFree, SHRINK_AGAIN);
+  }
+});
+
 listen("blip-state", (event) => {
   const { text } = event.payload;
   const state = NAMES[event.payload.state] || event.payload.state;
   lastText = text;
   sprout.setState(state);
+  // Rust also resends the same state when only its snippet changes.
+  if (state !== shownState) compactFor(state);
+  shownState = state;
   const now = performance.now();
   if (state === "hidden") spoke = { state: "", text: null, at: -Infinity };
   const repeat = spoke.state === state && spoke.text === text && now - spoke.at < REPEAT_GAP;
@@ -81,4 +143,10 @@ listen("blip-state", (event) => {
 listen("cursor", (event) => {
   const [x, y] = event.payload;
   sprout.lookAt(x, y);
+  pointer = [x, y];
+  if (small && overSprout()) {
+    setCompact(false);
+    clearTimeout(shrinkTimer);
+    shrinkTimer = setTimeout(shrinkWhenFree, SHRINK_AGAIN);
+  }
 });

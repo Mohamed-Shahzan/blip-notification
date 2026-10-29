@@ -755,6 +755,12 @@ STATES.forEach((s, i) => {
 });
 states.insertAdjacentHTML('beforeend', '<span class="sep"></span><button id="demo">Play demo loop</button>');
 document.getElementById('demo').onclick = () => demo ? stopDemo() : startDemo();
+// Compact working (Blip shrinks Sprout into this after a while in working): the bulb on a short stalk.
+states.insertAdjacentHTML('beforeend', '<button id="compact">Compact</button>');
+document.getElementById('compact').onclick = e => {
+  const on = e.currentTarget.classList.toggle('on');
+  sprouts.forEach(sp => sp.setCompact(on));
+};
 addEventListener('keydown', e => {
   if (e.target.matches('input, select')) return;
   const i = +e.key - 1; if (i >= 0 && i < STATES.length) setState(STATES[i]);
