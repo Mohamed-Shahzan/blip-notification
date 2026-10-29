@@ -9,7 +9,9 @@ const canvas = document.querySelector("#sprout");
 const box = BlipSprout.canvasSize(SIZE);
 canvas.style.width = box.width + "px";
 canvas.style.height = box.height + "px";
-const sprout = BlipSprout.create(canvas, { size: SIZE, bubbleBeside: true });
+// pointer: false, since the page only sees the mouse over Sprout itself. Rust
+// sends the cursor from anywhere on screen instead ("cursor", window points).
+const sprout = BlipSprout.create(canvas, { size: SIZE, bubbleBeside: true, pointer: false });
 
 // Tell Rust where Sprout's body is (window points), so clicks only land there.
 // The body is centred at 60% of the canvas height; the box adds the antenna.
@@ -27,4 +29,9 @@ const NAMES = { needs_you: "needs" };
 
 listen("blip-state", (event) => {
   sprout.setState(NAMES[event.payload] || event.payload);
+});
+
+listen("cursor", (event) => {
+  const [x, y] = event.payload;
+  sprout.lookAt(x, y);
 });

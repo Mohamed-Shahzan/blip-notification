@@ -40,6 +40,7 @@ static STATE_THREAD: OnceLock<thread::Thread> = OnceLock::new();
 // Click-through: the window ignores the mouse except over Sprout's body.
 // The page sends that box ("sprout-box", in window points); the cursor loop
 // checks it about 30 times a second while Sprout is shown, and only then.
+// The same loop feeds the cursor to Sprout's eyes.
 static SHOWN: AtomicBool = AtomicBool::new(false);
 static SPROUT_BOX: Mutex<Option<HitBox>> = Mutex::new(None);
 const CURSOR_POLL: Duration = Duration::from_millis(33);
@@ -152,36 +153,48 @@ fn handle(mut request: Request, app: AppHandle) {
     update_state(&app, event);
 }
 
-// Lets clicks reach the window only while the cursor is over Sprout.
+// While Sprout is shown: lets clicks reach the window only while the cursor
+// is over Sprout, and sends the cursor to the page ("cursor", window points)
+// when it moves, so the eyes follow it anywhere on screen.
 // Only asks the window to change when the answer changes.
 fn watch_cursor(window: tauri::WebviewWindow) {
     let mut ignoring = true;
+    let mut last = None;
     loop {
-        let over = SHOWN.load(Ordering::Relaxed) && cursor_over_sprout(&window).unwrap_or(false);
+        let shown = SHOWN.load(Ordering::Relaxed);
+        let cursor = if shown {
+            cursor_in_window(&window).ok()
+        } else {
+            None
+        };
+        if cursor.is_some() && cursor != last {
+            let _ = window.emit("cursor", cursor);
+        }
+        last = cursor;
+        let over = cursor.is_some_and(over_sprout);
         if over == ignoring && window.set_ignore_cursor_events(!over).is_ok() {
             ignoring = !over;
             eprintln!("blip: clicks {}", if over { "on" } else { "off" });
         }
-        thread::sleep(if SHOWN.load(Ordering::Relaxed) {
-            CURSOR_POLL
-        } else {
-            CURSOR_IDLE
-        });
+        thread::sleep(if shown { CURSOR_POLL } else { CURSOR_IDLE });
     }
 }
 
-fn cursor_over_sprout(window: &tauri::WebviewWindow) -> tauri::Result<bool> {
-    let Some(hit) = *SPROUT_BOX.lock().unwrap_or_else(|p| p.into_inner()) else {
-        return Ok(false);
-    };
-    // Cursor and window are both in physical pixels from the main screen's
-    // top-left; the box is in points, so scale it.
+// Cursor and window are both in physical pixels from the main screen's
+// top-left; the page works in points, so scale it.
+fn cursor_in_window(window: &tauri::WebviewWindow) -> tauri::Result<(f64, f64)> {
     let cursor = window.cursor_position()?;
     let origin = window.outer_position()?;
     let scale = window.scale_factor()?;
-    let x = (cursor.x - origin.x as f64) / scale;
-    let y = (cursor.y - origin.y as f64) / scale;
-    Ok(x >= hit.x && x <= hit.x + hit.w && y >= hit.y && y <= hit.y + hit.h)
+    Ok((
+        (cursor.x - origin.x as f64) / scale,
+        (cursor.y - origin.y as f64) / scale,
+    ))
+}
+
+fn over_sprout((x, y): (f64, f64)) -> bool {
+    let hit = *SPROUT_BOX.lock().unwrap_or_else(|p| p.into_inner());
+    hit.is_some_and(|hit| x >= hit.x && x <= hit.x + hit.w && y >= hit.y && y <= hit.y + hit.h)
 }
 
 fn machine(app: &AppHandle) -> MutexGuard<'_, state::Machine> {
