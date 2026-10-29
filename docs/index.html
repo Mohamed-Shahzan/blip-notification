@@ -3,63 +3,410 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Blip Notification</title>
-<meta name="description" content="A small animated character that tells you when Claude Code is done, needs you, or hit an error.">
+<title>Blip</title>
+<meta name="description" content="Sprout sits at the top of your screen and tells you when Claude Code needs you.">
+<meta property="og:title" content="Blip">
+<meta property="og:description" content="Sprout sits at the top of your screen and tells you when Claude Code needs you.">
+<!-- Preview only. The live site will self-host these three fonts. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=JetBrains+Mono:wght@400&family=Onest:wght@400;600&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg: #f7f8fa; --text: #14171c; --muted: #5b6370; --card: #ffffff; --line: #e1e4ea; --accent: #3b6ff5;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #0f1216; --text: #eef0f4; --muted: #99a1ae; --card: #171b21; --line: #272d36; --accent: #7aa2ff; }
-  }
+/* The Blip site (steps 4 and 5). Tokens and components copied from system.html, nothing new. */
+
+:root {
+  color-scheme: dark;
+
+  /* Colour */
+  --bg: #15130f;
+  --sunken: #0f0d0a;    /* hero screen, darker than the page */
+  --surface: #1e1c18;
+  --raised: #2a2722;
+  --line: #3a362f;
+  --ink: #f2eee7;
+  --muted: #a8a196;
+  --working: #4f8cff;
+  --needs: #ffb13b;
+  --done: #33c46a;
+  --error: #ff5a5f;
+
+  /* Type */
+  --font-display: "Bricolage Grotesque", system-ui, sans-serif;
+  --font-body: "Onest", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --size-xs: 13px;
+  --size-sm: 15px;
+  --size-md: 17px;
+  --size-lg: 21px;
+  --size-xl: 28px;
+  --size-hero: clamp(44px, 7vw, 56px);
+  --leading-tight: 1.1;
+  --leading-body: 1.55;
+  --weight-body: 400;
+  --weight-strong: 600;
+  --weight-display: 700;
+
+  /* Space: 4 based */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+
+  /* Shape and layout */
+  --radius-sm: 8px;
+  --radius-lg: 16px;
+  --page: 1040px;
+  --measure: 60ch;
+
+  /* Motion */
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --fast: 160ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --fast: 0ms; }
+}
+
+  /* Base */
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 680px; margin: 0 auto; padding: 56px 16px 72px; }
-  h1 { font-size: 2.2rem; line-height: 1.15; margin: 0 0 12px; }
-  h2 { font-size: 1.15rem; margin: 40px 0 10px; }
-  p { margin: 0 0 14px; }
-  .lead { font-size: 1.15rem; color: var(--muted); }
-  .badge { display: inline-block; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: .85rem; color: var(--muted); margin-bottom: 18px; }
-  .states { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 18px 0; }
-  .state { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
-  .state b { display: block; margin-bottom: 2px; }
-  .state span { color: var(--muted); font-size: .92rem; }
-  .video { background: var(--card); border: 1px dashed var(--line); border-radius: 12px; padding: 28px 16px; text-align: center; color: var(--muted); }
-  ul { padding-left: 20px; margin: 0 0 14px; }
-  li { margin-bottom: 6px; }
-  a { color: var(--accent); }
-  .btn { display: inline-block; margin-top: 6px; padding: 10px 18px; background: var(--accent); color: #fff; border-radius: 10px; text-decoration: none; font-weight: 600; }
-  @media (prefers-color-scheme: dark) { .btn { color: #0f1216; } }
-  footer { margin-top: 48px; color: var(--muted); font-size: .9rem; }
+  /* Sprout's faded bubble stays on the page at its last spot (sprout.js); after a resize it must not cause sideways scroll. */
+  html { overflow-x: clip; }
+  body { position: relative; overflow-x: clip; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: var(--weight-body) var(--size-md)/var(--leading-body) var(--font-body); }
+  .page { max-width: var(--page); margin: 0 auto; padding: 0 var(--space-4); }
+  p { margin: 0 0 var(--space-4); max-width: var(--measure); }
+  code { font-family: var(--font-mono); font-size: .9em; }
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+  /* Text styles */
+  .t-hero { font: var(--weight-display) var(--size-hero)/var(--leading-tight) var(--font-display); letter-spacing: -.02em; margin: 0 0 var(--space-4); text-wrap: balance; }
+  .t-lead { font-size: var(--size-lg); color: var(--muted); }
+  .t-small { font-size: var(--size-sm); color: var(--muted); }
+  .t-label { font: var(--size-xs) var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 0 0 var(--space-3); }
+
+  /* Button */
+  .btn { display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-5); border-radius: var(--radius-sm); border: 1px solid var(--line); background: none; color: var(--ink); font: var(--weight-strong) var(--size-sm) var(--font-body); text-decoration: none; cursor: pointer; transition: background var(--fast) var(--ease); }
+  .btn:hover { background: var(--raised); }
+  .btn.main { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .btn.main:hover { background: var(--muted); }
+
+  /* Hero */
+  .top { padding: var(--space-5) 0; }
+  .wordmark { font: var(--weight-display) var(--size-lg)/1 var(--font-display); color: var(--ink); text-decoration: none; }
+  .hero { padding: var(--space-8) 0; text-align: center; }
+  .hero p { margin-left: auto; margin-right: auto; }
+  .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-3); margin: var(--space-5) 0 var(--space-7); }
+
+  /* Screen frame: the hero demo */
+  .screen { background: var(--sunken); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; text-align: left; }
+  .menubar { height: 28px; background: var(--raised); }
+  .screen-top { display: flex; justify-content: center; height: 124px; }
+  /* Sprout's canvas sits in a button so the keyboard can poke it. The canvas is 112 x 142 (canvasSize(56)), its top hidden under the menu bar's edge. */
+  .poke { padding: 0; margin-top: -6px; border: 0; background: none; border-radius: var(--radius-sm); cursor: pointer; height: 142px; }
+  .poke canvas { display: block; width: 112px; height: 142px; }
+
+  /* Chat */
+  /* Desktop under the menu bar: the Claude window and Sprout's log side by side, stacked on phones */
+  .desk { display: grid; grid-template-columns: 1fr 240px; gap: var(--space-4); align-items: start; padding: 0 var(--space-5) var(--space-5); }
+  .window { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+  .titlebar { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); font: var(--size-xs) var(--font-mono); color: var(--muted); }
+  .titlebar i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+  .titlebar i:last-of-type { margin-right: var(--space-2); }
+
+  /* Chat */
+  /* Tall enough for the whole Allow path at desktop width (measured 341 px), so the window never grows mid-demo */
+  .chat { min-height: 344px; padding: var(--space-4); font-size: var(--size-sm); }
+  .msg { background: var(--raised); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); margin-bottom: var(--space-2); max-width: 85%; animation: in var(--fast) var(--ease) both; }
+  .msg.you { margin-left: auto; background: var(--line); }
+  .ask { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
+  .ask .btn { padding: var(--space-1) var(--space-4); }
+  .ask .btn:disabled { cursor: default; }
+  .ask .btn:disabled:not(.main) { opacity: .5; }
+  .again { display: block; margin: var(--space-3) auto 0; background: none; border: 0; padding: var(--space-1); color: var(--ink); font: inherit; text-decoration: underline; cursor: pointer; }
+  .events { list-style: none; margin: 0; padding: var(--space-3) var(--space-4); font-size: var(--size-sm); }
+  .events li { display: grid; grid-template-columns: 8px 1fr; column-gap: var(--space-3); align-items: baseline; padding: var(--space-2) 0; animation: in var(--fast) var(--ease) both; }
+  .events b { font-weight: var(--weight-strong); }
+  .events small { grid-column: 2; font-size: var(--size-xs); color: var(--muted); }
+  .events .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--line)); }
+  @keyframes in { from { opacity: 0; transform: translateY(4px); } }
+  @media (prefers-reduced-motion: reduce) { .msg, .events li { animation: none; } }
+
+  /* Sections */
+  .block { padding: var(--space-9) 0; border-top: 1px solid var(--line); }
+  .t-h2 { font: var(--weight-display) var(--size-xl)/var(--leading-tight) var(--font-display); margin: 0 0 var(--space-5); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-7); align-items: start; }
+
+  /* State card: a button, so a click or Enter pokes its Sprout */
+  .states { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3); margin-bottom: var(--space-4); }
+  .card { display: flex; flex-direction: column; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-5); font: var(--size-sm)/var(--leading-body) var(--font-body); color: var(--muted); text-align: left; cursor: pointer; }
+  .card canvas { display: block; width: 80px; height: 102px; margin: calc(-1 * var(--space-5)) 0 0 calc(-1 * var(--space-3)); }
+  .card b { display: block; color: var(--ink); margin: var(--space-3) 0 var(--space-1); }
+
+  /* Steps: How it works. A numbered circle per step, joined by a thin line */
+  .steps { list-style: none; margin: 0 0 var(--space-5); padding: 0; counter-reset: step; }
+  .steps li { position: relative; padding: 0 0 var(--space-5) var(--space-7); counter-increment: step; color: var(--muted); font-size: var(--size-sm); }
+  .steps li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--ink); font: var(--size-xs) var(--font-mono); }
+  .steps li:not(:last-child)::after { content: ""; position: absolute; left: 14px; top: 32px; bottom: var(--space-1); width: 1px; background: var(--line); }
+  .steps b { display: block; color: var(--ink); font-size: var(--size-md); }
+  .proof { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-3) var(--space-4); font-size: var(--size-sm); color: var(--muted); }
+  .proof b { color: var(--ink); }
+
+  /* Question */
+  details { border-bottom: 1px solid var(--line); padding: var(--space-4) 0; }
+  summary { font-weight: var(--weight-strong); cursor: pointer; }
+  details p { color: var(--muted); margin: var(--space-2) 0 0; }
+
+  /* Footer */
+  .footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-6) 0 var(--space-7); border-top: 1px solid var(--line); font-size: var(--size-sm); color: var(--muted); }
+  .footer a { color: var(--ink); }
+
+  @media (max-width: 720px) {
+    .hero { padding: var(--space-8) 0; }
+    .block { padding: var(--space-8) 0; }
+    .states { grid-template-columns: 1fr 1fr; }
+    .two { grid-template-columns: 1fr; gap: var(--space-5); }
+    .desk { grid-template-columns: 1fr; padding: 0 var(--space-3) var(--space-3); }
+  }
 </style>
 </head>
 <body>
-<main>
-  <span class="badge">Work in progress, Mac first</span>
-  <h1>Blip Notification</h1>
-  <p class="lead">A small animated character at the top centre of your screen that tells you when Claude Code is done, needs you, or hit an error, so you can look away while it works.</p>
+<main class="page">
+  <header class="top"><a class="wordmark" href="#">Blip</a></header>
+  <section class="hero">
+    <h1 class="t-hero">Sprout watches Claude Code so you don't have to.</h1>
+    <p class="t-lead">It sits at the top of your screen. When Claude needs you, it puts its hand up. That's most of it.</p>
+    <div class="actions">
+      <a class="btn main" href="https://github.com/Mohamed-Shahzan/blip-notification">GitHub</a>
+    </div>
+    <p class="t-small">This is your playground. Try Sprout here.</p>
 
-  <h2>What it tells you</h2>
-  <div class="states">
-    <div class="state"><b>Working</b><span>Claude is busy.</span></div>
-    <div class="state"><b>Needs you</b><span>A permission or a question is waiting.</span></div>
-    <div class="state"><b>Done</b><span>The turn finished.</span></div>
-    <div class="state"><b>Error</b><span>Something went wrong.</span></div>
-  </div>
+    <div class="screen" id="demo">
+      <div class="menubar"></div>
+      <div class="screen-top">
+        <button class="poke" id="poke" type="button" aria-label="Poke Sprout" tabindex="-1"><canvas id="sprout" aria-hidden="true"></canvas></button>
+      </div>
+      <div class="desk">
+        <div class="window">
+          <div class="titlebar" aria-hidden="true"><i></i><i></i><i></i>Claude</div>
+          <div class="chat" id="chat"></div>
+        </div>
+        <div class="window">
+          <div class="titlebar"><i aria-hidden="true"></i><i aria-hidden="true"></i><i aria-hidden="true"></i>What Sprout heard</div>
+          <ol class="events" id="events" aria-live="polite"></ol>
+        </div>
+      </div>
+    </div>
+  </section>
 
-  <h2>Demo</h2>
-  <div class="video">Demo video coming soon.</div>
+  <section class="block">
+    <h2 class="t-h2">The states</h2>
+    <div class="states">
+      <button class="card" type="button" data-state="working"><canvas aria-hidden="true"></canvas><b>Working</b>Blue. A light runs up the antenna about once a second, then it calms down so it isn't annoying.</button>
+      <button class="card" type="button" data-state="needs"><canvas aria-hidden="true"></canvas><b>Needs you</b>Amber. Hops, hand up. Every 8 seconds it reminds you again, quietly.</button>
+      <button class="card" type="button" data-state="done"><canvas aria-hidden="true"></canvas><b>Done</b>Green. One hop, a little star, then it goes away.</button>
+      <button class="card" type="button" data-state="error"><canvas aria-hidden="true"></canvas><b>Error</b>Red. It slumps. The bulb flickers until you go and look.</button>
+    </div>
+    <p class="t-small">Click Sprout a few times and it'll tell you what's going on. Click it a lot and it gets fed up.</p>
+  </section>
 
-  <h2>Where it is today</h2>
-  <ul>
-    <li>The engine works on the Mac, tested live in the Claude Desktop app and the Terminal.</li>
-    <li>It listens on your own machine only, and never slows Claude Code down. If Blip is closed or frozen, Claude behaves as if it did not exist.</li>
-    <li>The character is being added to the window now. Windows and an installer come after.</li>
-  </ul>
+  <section class="block two">
+    <div>
+      <h2 class="t-h2">How it works</h2>
+      <p>Claude Code can run a small command at each step of its work. Blip adds one that tells Sprout what just happened.</p>
+    </div>
+    <div>
+      <ol class="steps">
+        <li><b>Claude Code</b>asks for permission or finishes a task.</li>
+        <li><b>A small command</b>sends one line to Blip. It gives up after 2 seconds, and Claude never waits for it.</li>
+        <li><b>Blip</b>gets it on your own computer. Nothing goes online.</li>
+        <li><b>Sprout</b>shows it at the top of your screen.</li>
+      </ol>
+      <p class="proof"><b>Tested.</b> I froze Blip on purpose, on a Mac and on Windows, and Claude didn't notice.</p>
+    </div>
+  </section>
 
-  <p><a class="btn" href="https://github.com/Mohamed-Shahzan/blip-notification">View on GitHub</a></p>
+  <section class="block">
+    <h2 class="t-h2">Questions</h2>
+    <details open><summary>Does it slow Claude down?</summary><p>No. I tested it with Blip frozen and with Blip quit. Claude carried on both times.</p></details>
+    <details><summary>Does it send my code anywhere?</summary><p>No. Everything stays on your computer.</p></details>
+    <details><summary>Windows?</summary><p>It runs there, but Sprout isn't on Windows yet. Next on my list.</p></details>
+    <details><summary>Does it work with Cursor or Codex?</summary><p>With Claude Code, yes, wherever Claude Code runs. So far I've tested it in the Claude app and Terminal on a Mac. Codex and Cursor's own agent aren't supported yet.</p></details>
+    <details><summary>How do I install it?</summary><p>Right now you build it from the code. A proper installer comes later.</p></details>
+  </section>
 
-  <footer>Designed and built by Mohamed, with Claude Code. MIT licensed.</footer>
+  <footer class="footer">
+    <span>Made by Mohamed, a product designer, with Claude Code. MIT licence.</span>
+    <a href="https://github.com/Mohamed-Shahzan/blip-notification">GitHub</a>
+  </footer>
 </main>
+
+<!-- A copy of character/sprout.js (GitHub Pages only serves docs/). Re-copy when sprout.js changes. -->
+<script src="sprout.js"></script>
+<script>
+(function () {
+  // Timings for the fake chat, in ms.
+  const READ_MS = 2500, TESTS_MS = 2000, DONE_MS = 2500, DENY_MS = 1200, AWAKE_MS = 4500;
+  const NAMES = { working: 'Working', needs: 'Needs you', done: 'Done' };
+  const WAKE_LINE = 'Nothing to do right now. Press Try again.';
+  // Resting colours the done state grey (the muted token), so the hanging bulb reads "nothing going on", not Done.
+  const GREY = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
+  const GREEN = BlipSprout.DEFAULTS.colors.done;
+
+  const chat = document.getElementById('chat'), events = document.getElementById('events');
+  const pokeBtn = document.getElementById('poke');
+  // The button handles every press (handlePress off), so a click can wake a resting Sprout instead of poking it.
+  // compactTop: the stalk hangs from the menu bar's edge, 6 px below the canvas top (see .poke).
+  const sprout = BlipSprout.create(document.getElementById('sprout'), { size: 56, handlePress: false, compactTop: 6 });
+  let timers = [], started = false, keyboard = false; // keyboard: "Try again" was pressed with a key, so Allow gets focus next
+  let resting = false, awakeTimer = 0;
+
+  const later = (ms, fn) => timers.push(setTimeout(fn, ms));
+
+  function msg(html, you) {
+    const el = document.createElement('div');
+    el.className = 'msg' + (you ? ' you' : '');
+    el.innerHTML = html;
+    chat.appendChild(el);
+    return el;
+  }
+
+  // Sprout changes state and says its line; the log gets a row: the state, and what Claude did to cause it.
+  // The log is aria-live, so screen readers hear each row; the bubble stays quiet.
+  function state(s, why) {
+    sprout.setState(s);
+    sprout.say(sprout.line, false, 2200);
+    pokeBtn.tabIndex = 0;
+    logRow(NAMES[s], why, s);
+  }
+
+  function logRow(name, why, colour) {
+    const li = document.createElement('li'), dot = document.createElement('span'), b = document.createElement('b'), note = document.createElement('small');
+    dot.className = 'dot'; dot.style.setProperty('--c', 'var(--' + colour + ')');
+    b.textContent = name; note.textContent = why;
+    li.append(dot, b, note);
+    events.append(li);
+  }
+
+  // Where the app hides Sprout, the site keeps the antenna hanging (Sprout's compact form) so there is still
+  // something to click. Resting uses the done face, coloured grey; after a Deny it comes in quietly (no egg),
+  // since the visitor said no and there was no Done.
+  function rest(why) {
+    resting = true;
+    sprout.update({ colors: { done: GREY } });
+    sprout.setCompact(true);
+    if (sprout.state !== 'done') { sprout.update({ eggs: false }); sprout.setState('done'); sprout.update({ eggs: true }); }
+    pokeBtn.setAttribute('aria-label', 'Wake Sprout');
+    logRow('Resting', why, 'muted');
+  }
+
+  // A press: wakes a resting Sprout (it comes out and says there is nothing to do), otherwise a normal poke.
+  // Awake, it goes back into its bulb after a few quiet seconds; every press restarts that wait.
+  function press() {
+    if (resting) {
+      clearTimeout(awakeTimer);
+      awakeTimer = setTimeout(() => sprout.setCompact(true), AWAKE_MS);
+      if (sprout.compact) { sprout.setCompact(false); sprout.say(WAKE_LINE, true, AWAKE_MS - 500); return; }
+    }
+    sprout.poke();
+  }
+
+  function play() {
+    timers.forEach(clearTimeout); timers = [];
+    chat.textContent = ''; events.textContent = '';
+    clearTimeout(awakeTimer); resting = false;
+    sprout.update({ colors: { done: GREEN } });
+    sprout.setCompact(false);
+    pokeBtn.setAttribute('aria-label', 'Poke Sprout');
+    msg('Rename the old date helpers and run the tests.', true);
+    msg('Reading 14 files…');
+    state('working', 'You sent a prompt');
+    later(READ_MS, ask);
+  }
+
+  function ask() {
+    const el = msg('Can I run <code>npm test</code>?<div class="ask"><button class="btn main" type="button">Allow</button><button class="btn" type="button">Deny</button></div>');
+    const [allow, deny] = el.querySelectorAll('button');
+    state('needs', 'Claude asked to run a command');
+    allow.onclick = () => answer(true, allow, deny);
+    deny.onclick = () => answer(false, allow, deny);
+    // Move focus only when the visitor is already using the demo, never by surprise on load.
+    if (keyboard) allow.focus({ preventScroll: true });
+  }
+
+  function answer(ok, allow, deny) {
+    allow.disabled = deny.disabled = true;
+    (ok ? allow : deny).classList.add('main');
+    (ok ? deny : allow).classList.remove('main');
+    if (ok) {
+      msg('Running tests…');
+      state('working', 'You allowed it');
+      later(TESTS_MS, () => {
+        msg('All 32 tests pass.');
+        state('done', 'Claude finished');
+        later(DONE_MS, () => { rest('In the app Sprout hides. Here it waits for a click.'); again(); });
+      });
+    } else {
+      // Like the real app: no hook fires after a Deny, so Sprout stays on Needs you until Claude's reply ends the turn.
+      later(DENY_MS, () => {
+        msg('Okay, I won\'t run them.');
+        rest('You said no, so no Done. Here it waits for a click.');
+        again();
+      });
+    }
+  }
+
+  function again() {
+    const btn = document.createElement('button');
+    btn.className = 'again'; btn.type = 'button'; btn.textContent = 'Try again';
+    btn.onclick = e => { keyboard = e.detail === 0; play(); };
+    chat.appendChild(btn);
+    // Allow and Deny are now disabled, so focus would fall back to the page top; keep it in the demo.
+    btn.focus({ preventScroll: true });
+  }
+
+  // Mouse, touch, Enter and Space all arrive as a click on the button.
+  pokeBtn.addEventListener('click', press);
+
+  // Start when the screen is in view, so the story doesn't play unseen.
+  new IntersectionObserver((entries, io) => {
+    if (!started && entries[0].isIntersecting) { started = true; io.disconnect(); play(); }
+  }, { threshold: .4 }).observe(document.getElementById('demo'));
+})();
+
+// State cards: each has its own Sprout at half bounce, so it stays calm inside a card.
+// It shows its state once the cards are in view. A click or Enter pokes it (the card is the button,
+// so Sprout's own press handling is off). Hovering with a mouse makes it say its line.
+// Done does what the card says: shows, goes away, comes back after a pause.
+(function () {
+  const DONE_SHOW_MS = 2500, DONE_GONE_MS = 2000;
+  const cards = [...document.querySelectorAll('.card')].map(card => {
+    const sprout = BlipSprout.create(card.querySelector('canvas'), { size: 40, handlePress: false, settings: { bounce: .5 } });
+    card.addEventListener('click', () => sprout.poke());
+    card.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') sprout.say(sprout.line, false, 2200); });
+    return { card, sprout };
+  });
+  function doneLoop(sprout) {
+    sprout.setState('done');
+    doneTimers.push(setTimeout(() => sprout.setState('hidden'), DONE_SHOW_MS));
+    doneTimers.push(setTimeout(() => doneLoop(sprout), DONE_SHOW_MS + DONE_GONE_MS));
+  }
+  // In view: each Sprout shows its state. Out of view: all hide, which stops their drawing loops (saves battery).
+  let doneTimers = [];
+  new IntersectionObserver(entries => {
+    doneTimers.forEach(clearTimeout); doneTimers = [];
+    const seen = entries[entries.length - 1].isIntersecting;
+    cards.forEach(({ card, sprout }) => {
+      if (!seen) sprout.setState('hidden');
+      else if (card.dataset.state === 'done') doneLoop(sprout);
+      else sprout.setState(card.dataset.state);
+    });
+  }, { threshold: .1 }).observe(document.querySelector('.states'));
+})();
+</script>
 </body>
 </html>
