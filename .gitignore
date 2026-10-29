@@ -9,6 +9,8 @@ logs/
 target/
 dist/
 node_modules/
+# Copied from character/sprout.js by app/src-tauri/build.rs
+app/src/sprout.js
 
 # OS files
 .DS_Store

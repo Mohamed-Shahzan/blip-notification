@@ -1,7 +1,7 @@
 // Phase 0c placeholder window (transparent, always on top, click-through, top
 // centre) with the Phase 1 bridge: hook events arrive on 127.0.0.1, mod events
-// as small files in ~/.blip/inbox. Every event makes the blob pulse and is
-// written to logs/received.jsonl. The state (state.rs) goes to the page as "blip-state".
+// as small files in ~/.blip/inbox. Every event is written to logs/received.jsonl.
+// The state (state.rs) goes to the page as "blip-state", where Sprout shows it.
 
 mod state;
 
