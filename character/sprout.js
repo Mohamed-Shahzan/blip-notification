@@ -108,8 +108,9 @@
   const UNITS_PER_SIZE = 75;
   const BOX = { rx: 40, ry: 46, cy: -4 };
   const BUBBLE_TIME = 2.2;
-  // Compact form: the stalk's length and the sign of life's period, in drawing units and seconds.
-  const STALK = 12, PULSE = 5;
+  // Compact form: the stalk's length, how much bigger the bulb is than on full Sprout (alone it needs it to
+  // be seen, Mohamed 30 Oct), its radius, and the sign of life's period, in drawing units and seconds.
+  const STALK = 13, SMALL = 1.4, SMALL_R = 6.5 * SMALL, PULSE = 5;
   // Click ladder. Clicks count as one streak while each comes within STREAK_GAP ms of the last:
   // 3 clicks say what Sprout is doing; from 6 on it is fed up (tired eyes, antenna flopped over) until the
   // clicks stop for FED_HOLD ms.
@@ -370,16 +371,20 @@
     mouth(ctx, st, { y: 19, w: 8, ink: INK });
   }
 
-  // The compact form: a short stalk from above and the bulb at y. Every PULSE seconds the bulb brightens
-  // and a ripple spreads, a slow sign of life (the full Sprout's working light comes about every second).
+  // The compact form: a short stalk from above and the bulb at y, always at full strength and always the
+  // round bulb (the night moon is too thin at this size). Every PULSE seconds the glow swells and a ripple
+  // spreads, a slow sign of life (the full Sprout's working light comes about every second).
   function drawSmall(ctx, st, y) {
     const c = st.col, ph = st.t % PULSE, rim = rimColour(c, st.P.outline);
     const flash = ph < .4 ? Math.sin(ph / .4 * Math.PI) : 0, ripple = ph < 1.2 ? ph / 1.2 : -1;
     ctx.save(); ctx.globalAlpha = st.alpha;
-    ctx.strokeStyle = rimColour(c, 1); ctx.lineWidth = 3; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(0, y - 6.5 - STALK); ctx.lineTo(0, y - 6); ctx.stroke();
+    // A lighter stalk than the antenna's outline colour, so it still shows on a dark toolbar.
+    ctx.strokeStyle = rgba(shade(c, .3)); ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(0, y - SMALL_R - STALK); ctx.lineTo(0, y - SMALL_R + 1); ctx.stroke();
+    ctx.translate(0, y); ctx.scale(SMALL, SMALL);
+    const strong = { ...st, P: { ...st.P, glow: Math.max(st.P.glow, .8) } };
+    drawBulb(ctx, strong, 0, 0, flash, st.reduce ? -1 : ripple, 1, rim, false);
     ctx.restore();
-    drawBulb(ctx, st, 0, y, flash, st.reduce ? -1 : ripple, .6 + .4 * flash, rim, st.night);
   }
 
   // The antenna bulb at (ex, ey): done star, working ripple, then the bulb with its rim and shine.
@@ -462,8 +467,8 @@
       const r = canvas.getBoundingClientRect(), u = drawPx() / UNITS_PER_SIZE;
       // Compact: the stalk and bulb, padded so the pointer finds it easily.
       if (S.compact) {
-        const pad = 8, half = 7 * u + pad, top = r.top + (opts.compactTop || 0);
-        return { x: r.left + cw / 2 - half, y: top, w: half * 2, h: (STALK + 14) * u + pad };
+        const pad = 8, half = (SMALL_R + 1) * u + pad, top = r.top + (opts.compactTop || 0);
+        return { x: r.left + cw / 2 - half, y: top, w: half * 2, h: (STALK + SMALL_R * 2 + 1) * u + pad };
       }
       const top = BOX.cy - BOX.ry - 14 - 21 * P.bounce, bottom = BOX.cy + BOX.ry, half = BOX.rx + 5;
       return { x: r.left + cw / 2 - half * u, y: r.top + ch * .6 + top * u, w: half * 2 * u, h: (bottom - top) * u };
@@ -586,7 +591,8 @@
       bubble.style.transformOrigin = flip ? 'right bottom' : 'left bottom';
       bubble.style.left = (left + root.scrollX) + 'px';
       bubble.style.top = (r.top + root.scrollY + ch * .6 + by * u - bubble.offsetHeight) + 'px';
-      requestAnimationFrame(() => { bubble.style.opacity = 1; bubble.style.transform = 'scale(1)'; });
+      // Only if still open by the next frame: a frame can come late (a background tab), after hideBubble.
+      requestAnimationFrame(() => { if (bubbleOpen) { bubble.style.opacity = 1; bubble.style.transform = 'scale(1)'; } });
       clearTimeout(bubbleTimer);
       bubbleTimer = setTimeout(hideBubble, hold); bubbleUntil = now + hold;
     }
@@ -681,7 +687,7 @@
         const m = motion(st);
         ctx.setTransform(kpx, 0, 0, kpx, cw * dpr / 2, cy * dpr);
         // Compact: the body shrinks up into the bulb and fades; the bulb hangs where the stalk starts.
-        const sm = clamp(S.small.x, 0, 1), bulbY = ((opts.compactTop || 0) - cy) / scale + STALK + 6.5;
+        const sm = clamp(S.small.x, 0, 1), bulbY = ((opts.compactTop || 0) - cy) / scale + STALK + SMALL_R;
         ctx.save(); ctx.translate(m.x * (1 - sm), lerp(m.y, bulbY, sm) + slide); ctx.rotate(m.rot * (1 - sm));
         ctx.globalAlpha = alpha * clamp(1 - sm * 1.4, 0, 1); ctx.scale(1 - .8 * sm, 1 - .8 * sm);
         // Same size in every state; needs you starts with a short grow-and-settle pop.
