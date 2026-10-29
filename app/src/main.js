@@ -29,8 +29,15 @@ new ResizeObserver(sendBox).observe(canvas);
 // Rust names match Sprout's, except "needs_you" (Sprout calls it "needs").
 const NAMES = { needs_you: "needs" };
 
+// Sprout says its line when it changes to one of these. Working stays quiet,
+// since it starts every turn. The line stays about as long as Done shows (5 s).
+const SPEAKS = ["needs", "done", "error"];
+const SPEAK_FOR = 5000;
+
 listen("blip-state", (event) => {
-  sprout.setState(NAMES[event.payload] || event.payload);
+  const state = NAMES[event.payload] || event.payload;
+  sprout.setState(state);
+  if (SPEAKS.includes(state)) sprout.say(sprout.line, true, SPEAK_FOR);
   sendBox();
 });
 

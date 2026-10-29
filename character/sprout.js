@@ -15,6 +15,7 @@
 //                                 // handling on the canvas); holding 3 s grows the leaf
 //   sprout.say(text);             // a short speech bubble next to Sprout (three quick clicks show the state line);
 //                                 // opts.bubbleBeside puts it beside the body instead of above the head
+//   sprout.line                   // the current state's line ("All done!"...), for a host that says it on a change
 //   sprout.update(settings);      // change some settings live; the rest keep their values
 //   Options for testing the easter eggs: opts.luck (chance of a lucky leaf per done), opts.date (a function
 //   returning the Date to use).
@@ -680,6 +681,7 @@
       // Changes only the settings given; the rest keep their current values.
       update(settings) { P = merge(P, settings); start(); },
       get state() { return S.state; },
+      get line() { return lines[S.shown]; },
       get running() { return raf !== 0; },
       destroy() {
         if (raf) cancelAnimationFrame(raf); raf = 0;
