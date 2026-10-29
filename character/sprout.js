@@ -11,7 +11,8 @@
 //   sprout.press(); sprout.release(); sprout.cancel();  // pointer down / up / leave, for a host that handles
 //                                 // presses itself (handlePress: false turns off Sprout's own click and hold
 //                                 // handling on the canvas); holding 3 s grows the leaf
-//   sprout.say(text);             // a short speech bubble next to Sprout (three quick clicks show the state line)
+//   sprout.say(text);             // a short speech bubble next to Sprout (three quick clicks show the state line);
+//                                 // opts.bubbleBeside puts it beside the body instead of above the head
 //   sprout.update(settings);      // change some settings live; the rest keep their values
 //   Options for testing the easter eggs: opts.luck (chance of a lucky leaf per done), opts.date (a function
 //   returning the Date to use).
@@ -520,16 +521,18 @@
       }
       bubble.setAttribute('aria-live', announce ? 'polite' : 'off');
       bubble.textContent = text;
-      // Bottom-left corner of the bubble just above and right of the head (24, -50 in drawing units).
+      // Bottom-left corner of the bubble just above and right of the head (24, -50 in drawing units),
+      // or with opts.bubbleBeside beside the body at eye level (48, 6), for a window with little room above.
       const r = canvas.getBoundingClientRect(), u = drawPx() / UNITS_PER_SIZE;
+      const [bx, by] = opts.bubbleBeside ? [48, 6] : [24, -50];
       // Right of the head when it fits in the window, otherwise mirrored to the left of it.
-      let left = r.left + cw / 2 + 24 * u;
+      let left = r.left + cw / 2 + bx * u;
       const flip = left + bubble.offsetWidth > root.innerWidth - 8;
-      if (flip) left = Math.max(8, r.left + cw / 2 - 24 * u - bubble.offsetWidth);
+      if (flip) left = Math.max(8, r.left + cw / 2 - bx * u - bubble.offsetWidth);
       bubble.style.borderRadius = flip ? '12px 12px 3px 12px' : '12px 12px 12px 3px';
       bubble.style.transformOrigin = flip ? 'right bottom' : 'left bottom';
       bubble.style.left = (left + root.scrollX) + 'px';
-      bubble.style.top = (r.top + root.scrollY + ch * .6 - 50 * u - bubble.offsetHeight) + 'px';
+      bubble.style.top = (r.top + root.scrollY + ch * .6 + by * u - bubble.offsetHeight) + 'px';
       requestAnimationFrame(() => { bubble.style.opacity = 1; bubble.style.transform = 'scale(1)'; });
       clearTimeout(bubbleTimer);
       bubbleTimer = setTimeout(hideBubble, hold);
