@@ -8,6 +8,8 @@ fn main() {
     let src = Path::new("../../character/sprout.js");
     let dst = Path::new("../src/sprout.js");
     println!("cargo:rerun-if-changed={}", src.display());
+    // Also when the copy is deleted or edited, so it is put back.
+    println!("cargo:rerun-if-changed={}", dst.display());
     let code = fs::read(src).expect("read character/sprout.js");
     if fs::read(dst).ok().as_deref() != Some(code.as_slice()) {
         fs::write(dst, code).expect("copy sprout.js into app/src");

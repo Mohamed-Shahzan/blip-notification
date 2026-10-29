@@ -8,6 +8,8 @@
 //   sprout.poke();                // the click reaction (a short press on the canvas does this). Quick clicks in a row:
 //                                 // 3 say what Sprout is doing, 6 and more make it fed up
 //   sprout.lookAt(x, y);          // cursor in client pixels; the page's pointermove does this by default
+//   sprout.bodyBox();             // {x, y, w, h} in client pixels around the body, antenna and highest hop,
+//                                 // for a host that lets clicks through everywhere else
 //   sprout.press(); sprout.release(); sprout.cancel();  // pointer down / up / leave, for a host that handles
 //                                 // presses itself (handlePress: false turns off Sprout's own click and hold
 //                                 // handling on the canvas); holding 3 s grows the leaf
@@ -435,6 +437,13 @@
     }
     // Body size in CSS pixels: the given size, or as large as the canvas allows with 'fit'.
     const drawPx = () => size === 'fit' ? Math.min(cw / 150, ch / 190) * UNITS_PER_SIZE : size;
+    // Body plus room above for the antenna (14 units) and the needs-you hop (21 units at Bounce 1),
+    // a little wider than the body for the raised hand.
+    function bodyBox() {
+      const r = canvas.getBoundingClientRect(), u = drawPx() / UNITS_PER_SIZE;
+      const top = BOX.cy - BOX.ry - 14 - 21 * P.bounce, bottom = BOX.cy + BOX.ry, half = BOX.rx + 5;
+      return { x: r.left + cw / 2 - half * u, y: r.top + ch * .6 + top * u, w: half * 2 * u, h: (bottom - top) * u };
+    }
     function start() { if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } }
 
     const today = () => (opts.date ? opts.date() : new Date());
@@ -667,7 +676,7 @@
     if (opts.handlePress !== false) for (const ev in POINTER) canvas.addEventListener(ev, POINTER[ev]);
 
     return {
-      setState, poke, press, release, cancel, lookAt, say,
+      setState, poke, press, release, cancel, lookAt, say, bodyBox,
       // Changes only the settings given; the rest keep their current values.
       update(settings) { P = merge(P, settings); start(); },
       get state() { return S.state; },

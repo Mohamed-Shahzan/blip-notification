@@ -36,15 +36,16 @@ const ALIVE_CHECK: f64 = 15.0;
 
 // The state thread, woken after each event so it can plan its next wake.
 static STATE_THREAD: OnceLock<thread::Thread> = OnceLock::new();
+// The cursor thread, asleep while Sprout is hidden and woken when it shows.
+static CURSOR_THREAD: OnceLock<thread::Thread> = OnceLock::new();
 
 // Click-through: the window ignores the mouse except over Sprout's body.
 // The page sends that box ("sprout-box", in window points); the cursor loop
-// checks it about 30 times a second while Sprout is shown, and only then.
+// checks it about 30 times a second while Sprout is shown, and sleeps otherwise.
 // The same loop feeds the cursor to Sprout's eyes.
 static SHOWN: AtomicBool = AtomicBool::new(false);
 static SPROUT_BOX: Mutex<Option<HitBox>> = Mutex::new(None);
 const CURSOR_POLL: Duration = Duration::from_millis(33);
-const CURSOR_IDLE: Duration = Duration::from_millis(200);
 
 #[derive(Clone, Copy, Deserialize)]
 struct HitBox {
@@ -74,11 +75,6 @@ pub fn run() {
                 window.set_position(PhysicalPosition::new(x, origin.y))?;
             }
 
-            // Phase 0 check: the page reports each pulse back, printed to the dev log.
-            app.listen("blip-pulsed", |event| {
-                eprintln!("blip: pulsed {}", event.payload())
-            });
-
             app.manage(Mutex::new(state::Machine::default()));
             let handle = app.handle().clone();
             thread::spawn(move || listen(handle));
@@ -93,7 +89,8 @@ pub fn run() {
                     *SPROUT_BOX.lock().unwrap_or_else(|p| p.into_inner()) = Some(hit);
                 }
             });
-            thread::spawn(move || watch_cursor(window));
+            let thread = thread::spawn(move || watch_cursor(window));
+            let _ = CURSOR_THREAD.set(thread.thread().clone());
             Ok(())
         })
         .run(tauri::generate_context!())
@@ -144,7 +141,6 @@ fn handle(mut request: Request, app: AppHandle) {
         "winpid": query_value(&url, "winpid"),
         "event": event,
     }));
-    let _ = app.emit("blip-event", name);
     // Git Bash numbers its own processes, so on Windows only winpid is a real process id.
     let pid_key = if cfg!(windows) { "winpid" } else { "pid" };
     let pid = query_value(&url, pid_key).and_then(|v| v.parse().ok());
@@ -176,7 +172,11 @@ fn watch_cursor(window: tauri::WebviewWindow) {
             ignoring = !over;
             eprintln!("blip: clicks {}", if over { "on" } else { "off" });
         }
-        thread::sleep(if shown { CURSOR_POLL } else { CURSOR_IDLE });
+        if shown {
+            thread::sleep(CURSOR_POLL);
+        } else {
+            thread::park(); // update_state wakes it when Sprout shows
+        }
     }
 }
 
@@ -217,6 +217,9 @@ fn update_state(app: &AppHandle, event: Option<state::Event>) {
     if let Some(state) = machine.changed(now) {
         eprintln!("blip: state {state:?}");
         SHOWN.store(state != state::State::Hidden, Ordering::Relaxed);
+        if let Some(thread) = CURSOR_THREAD.get() {
+            thread.unpark();
+        }
         let _ = app.emit("blip-state", state);
     }
 }
@@ -427,7 +430,6 @@ fn read_inbox_file(path: &Path, app: &AppHandle) {
                 .unwrap_or("unknown")
                 .to_string();
             record(serde_json::json!({ "ts": now(), "src": "mod", "name": name, "event": event }));
-            let _ = app.emit("blip-event", name);
             update_state(app, state::translate("mod", &event));
         }
     }
