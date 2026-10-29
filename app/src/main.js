@@ -1,7 +1,10 @@
 // Sprout follows the state Blip's Rust side sends as "blip-state".
 const { listen } = window.__TAURI__.event;
 
-const SIZE = 32; // body size in CSS pixels
+// Body size in CSS pixels. The window (tauri.conf.json, 620 x 136) fits its
+// 128 x 163 canvas (raised 34 px in styles.css) plus the widest bubble line
+// (277 px) on either side.
+const SIZE = 64;
 const canvas = document.querySelector("#sprout");
 const box = BlipSprout.canvasSize(SIZE);
 canvas.style.width = box.width + "px";

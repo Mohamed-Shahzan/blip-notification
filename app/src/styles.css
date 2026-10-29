@@ -12,6 +12,11 @@ body {
   justify-content: center;
 }
 
+/* Sprout's canvas keeps room above it for the slide-in from the top edge.
+   Once settled nothing reaches higher than 41 px (the needs-you hop), so pull
+   it up 34 px: Sprout sits closer to the menu bar and the slide-in comes out
+   of the window's top edge. Window height in tauri.conf.json is 170 - 34. */
 #sprout {
   display: block;
+  margin-top: -34px;
 }
