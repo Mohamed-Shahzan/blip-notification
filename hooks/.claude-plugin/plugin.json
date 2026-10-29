@@ -1,0 +1,6 @@
+{
+  "name": "blip",
+  "version": "0.2.0",
+  "description": "Blip: tells the Blip character on your screen when Claude Code finished, needs you, or hit an error",
+  "author": { "name": "Mohamed" }
+}

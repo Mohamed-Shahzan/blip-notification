@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blip Notification</title>
+<meta name="description" content="A small animated character that tells you when Claude Code is done, needs you, or hit an error.">
+<style>
+  :root {
+    --bg: #f7f8fa; --text: #14171c; --muted: #5b6370; --card: #ffffff; --line: #e1e4ea; --accent: #3b6ff5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1216; --text: #eef0f4; --muted: #99a1ae; --card: #171b21; --line: #272d36; --accent: #7aa2ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 56px 16px 72px; }
+  h1 { font-size: 2.2rem; line-height: 1.15; margin: 0 0 12px; }
+  h2 { font-size: 1.15rem; margin: 40px 0 10px; }
+  p { margin: 0 0 14px; }
+  .lead { font-size: 1.15rem; color: var(--muted); }
+  .badge { display: inline-block; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: .85rem; color: var(--muted); margin-bottom: 18px; }
+  .states { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 18px 0; }
+  .state { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .state b { display: block; margin-bottom: 2px; }
+  .state span { color: var(--muted); font-size: .92rem; }
+  .video { background: var(--card); border: 1px dashed var(--line); border-radius: 12px; padding: 28px 16px; text-align: center; color: var(--muted); }
+  ul { padding-left: 20px; margin: 0 0 14px; }
+  li { margin-bottom: 6px; }
+  a { color: var(--accent); }
+  .btn { display: inline-block; margin-top: 6px; padding: 10px 18px; background: var(--accent); color: #fff; border-radius: 10px; text-decoration: none; font-weight: 600; }
+  @media (prefers-color-scheme: dark) { .btn { color: #0f1216; } }
+  footer { margin-top: 48px; color: var(--muted); font-size: .9rem; }
+</style>
+</head>
+<body>
+<main>
+  <span class="badge">Work in progress, Mac first</span>
+  <h1>Blip Notification</h1>
+  <p class="lead">A small animated character at the top centre of your screen that tells you when Claude Code is done, needs you, or hit an error, so you can look away while it works.</p>
+
+  <h2>What it tells you</h2>
+  <div class="states">
+    <div class="state"><b>Working</b><span>Claude is busy.</span></div>
+    <div class="state"><b>Needs you</b><span>A permission or a question is waiting.</span></div>
+    <div class="state"><b>Done</b><span>The turn finished.</span></div>
+    <div class="state"><b>Error</b><span>Something went wrong.</span></div>
+  </div>
+
+  <h2>Demo</h2>
+  <div class="video">Demo video coming soon.</div>
+
+  <h2>Where it is today</h2>
+  <ul>
+    <li>The engine works on the Mac, tested live in the Claude Desktop app and the Terminal.</li>
+    <li>It listens on your own machine only, and never slows Claude Code down. If Blip is closed or frozen, Claude behaves as if it did not exist.</li>
+    <li>The character is being added to the window now. Windows and an installer come after.</li>
+  </ul>
+
+  <p><a class="btn" href="https://github.com/Mohamed-Shahzan/blip-notification">View on GitHub</a></p>
+
+  <footer>Designed and built by Mohamed, with Claude Code. MIT licensed.</footer>
+</main>
+</body>
+</html>

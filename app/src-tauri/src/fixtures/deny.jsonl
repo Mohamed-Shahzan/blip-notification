@@ -1,0 +1,9 @@
+{"line": 40, "at": 0.0, "src": "hook", "event": {"hook_event_name": "UserPromptSubmit", "session_id": "s1", "prompt_id": "p1"}}
+{"line": 41, "at": 5.46, "src": "hook", "event": {"hook_event_name": "PreToolUse", "session_id": "s1", "prompt_id": "p1", "tool_name": "Bash", "tool_input": {"command": "i1", "description": "i2"}}}
+{"line": 42, "at": 5.469, "src": "hook", "event": {"hook_event_name": "PermissionRequest", "session_id": "s1", "prompt_id": "p1", "tool_name": "Bash", "tool_input": {"command": "i1", "description": "i2"}}}
+{"line": 43, "at": 8.402, "src": "hook", "event": {"hook_event_name": "PostToolUse", "session_id": "s1", "prompt_id": "p1", "tool_name": "Bash", "tool_input": {"command": "i1", "description": "i2"}}}
+{"line": 44, "at": 19.268, "src": "hook", "event": {"hook_event_name": "PreToolUse", "session_id": "s1", "prompt_id": "p1", "tool_name": "mcp__ccd_turn__update_plan", "tool_input": {"done": "i3", "start": "i4"}}}
+{"line": 45, "at": 19.28, "src": "hook", "event": {"hook_event_name": "PreToolUse", "session_id": "s1", "prompt_id": "p1", "tool_name": "Bash", "tool_input": {"command": "i5", "description": "i6"}}}
+{"line": 46, "at": 19.28, "src": "hook", "event": {"hook_event_name": "PostToolUse", "session_id": "s1", "prompt_id": "p1", "tool_name": "mcp__ccd_turn__update_plan", "tool_input": {"done": "i3", "start": "i4"}}}
+{"line": 47, "at": 19.306, "src": "hook", "event": {"hook_event_name": "PermissionRequest", "session_id": "s1", "prompt_id": "p1", "tool_name": "Bash", "tool_input": {"command": "i5", "description": "i6"}}}
+{"line": 48, "at": 22.841, "src": "mod", "event": {"kind": "turn.complete", "session": "s1", "reason": "answer", "ts": 22.792}}

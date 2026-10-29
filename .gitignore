@@ -1,0 +1,28 @@
+# Event logs contain prompts and code. Never commit.
+logs/
+*.log
+*.jsonl
+# Except test fixtures: real lines cut down to event names and placeholder ids, no prompts or code.
+!app/src-tauri/src/fixtures/*.jsonl
+
+# Build output (Rust / Tauri / Node)
+target/
+dist/
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# Private project files: kept on disk, not published
+CLAUDE.md
+HANDOFF.md
+.claude/
+app/README.md
+hooks/experiments/
+docs/*
+!docs/index.html
+!docs/.nojekyll

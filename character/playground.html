@@ -1,0 +1,858 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blip Character Playground</title>
+<style>
+:root {
+  --bg: #f3f3ef; --panel: #ffffff; --text: #1b1c20; --muted: #6a6c75; --line: #e1e1da;
+  --chip: #efefea; --accent: #3d6bff; --accent-text: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111216; --panel: #1a1b20; --text: #ececef; --muted: #9a9ca6; --line: #2b2d34;
+    --chip: #24252b; --accent: #7d9bff; --accent-text: #0e1020;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111216; --panel: #1a1b20; --text: #ececef; --muted: #9a9ca6; --line: #2b2d34;
+  --chip: #24252b; --accent: #7d9bff; --accent-text: #0e1020;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+.app { display: grid; grid-template-columns: 300px 1fr; min-height: 100vh; }
+.panel {
+  background: var(--panel); border-right: 1px solid var(--line); padding: 20px 18px 40px;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+h1 { font-size: 18px; margin: 0 0 4px; }
+h2 { font-size: 15px; margin: 0; }
+h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 22px 0 8px; }
+.muted { color: var(--muted); margin: 0; }
+.ctl { margin: 8px 0; }
+.ctl label { display: flex; justify-content: space-between; font-size: 13px; }
+.ctl output { color: var(--muted); font-variant-numeric: tabular-nums; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.colors { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.colors label { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+input[type=color] { width: 34px; height: 26px; border: 1px solid var(--line); border-radius: 6px; padding: 0; background: none; }
+select { font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--chip); color: var(--text); }
+.check { display: flex; align-items: center; gap: 8px; margin: 8px 0; font-size: 13px; }
+button {
+  font: inherit; font-size: 13px; padding: 7px 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--chip); color: var(--text);
+}
+button:hover { border-color: var(--muted); }
+button.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.row { display: flex; flex-wrap: wrap; gap: 6px; }
+pre { background: var(--chip); padding: 10px; border-radius: 8px; font-size: 11px; white-space: pre-wrap; word-break: break-all; }
+
+main { padding: 0 24px 40px; min-width: 0; }
+.statebar {
+  position: sticky; top: 0; z-index: 2; background: var(--bg);
+  padding: 14px 0 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+}
+.statebar .key { color: var(--muted); font-size: 11px; margin-left: 4px; }
+.statebar .sep { flex: 1; }
+
+body.stage-dark  { --stage: #17181d; }
+body.stage-light { --stage: #e9e8e2; }
+body.stage-wall  { --stage: linear-gradient(135deg, #4b5d86 0%, #9b6f8f 55%, #d59a6e 100%); }
+body.stage-bright { --stage: linear-gradient(135deg, #e6eefa 0%, #f6f1e7 55%, #f7dcc8 100%); }
+.stage canvas, .chip canvas, .screen canvas { cursor: pointer; }
+.contrast { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 10px; font-variant-numeric: tabular-nums; }
+.contrast th, .contrast td { padding: 3px 2px; text-align: center; border-bottom: 1px solid var(--line); }
+.contrast th:first-child, .contrast td:first-child { text-align: left; }
+.contrast .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 2px; vertical-align: -1px; }
+.contrast .bad { color: #d9534f; font-weight: 600; }
+.contrast .ok { color: var(--muted); }
+.note { font-size: 11px; color: var(--muted); margin: 6px 0 0; }
+
+.screen { position: relative; height: 110px; border-radius: 12px; overflow: hidden; background: var(--stage); border: 1px solid var(--line); }
+.menubar {
+  position: absolute; inset: 0 0 auto 0; height: 24px; display: flex; align-items: center; gap: 16px;
+  padding: 0 12px; font-size: 12px; background: rgba(255,255,255,.55); color: #111;
+  backdrop-filter: blur(8px);
+}
+body.stage-dark .menubar { background: rgba(30,30,34,.7); color: #eee; }
+.menubar .dot { width: 12px; height: 12px; border-radius: 50%; background: currentColor; opacity: .8; }
+.menubar .end { margin-left: auto; }
+.screen canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.screen-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 0 18px; font-size: 13px; color: var(--muted); }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.card.picked { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.card header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.tag { font-size: 11px; color: var(--muted); background: var(--chip); padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
+.blurb { margin: 0; color: var(--muted); font-size: 13px; min-height: 38px; }
+.stage { background: var(--stage); border-radius: 10px; position: relative; }
+.stage.big { height: 270px; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.smalls { display: flex; gap: 8px; align-items: center; }
+.chip { position: relative; width: 84px; height: 60px; border-radius: 8px; }
+.chip.dark { background: #1d1e23; }
+.chip.light { background: #ecebe6; }
+.chip.wall { background: linear-gradient(135deg, #4b5d86 0%, #9b6f8f 55%, #d59a6e 100%); }
+.chip.bright { background: linear-gradient(135deg, #e6eefa 0%, #f6f1e7 55%, #f7dcc8 100%); }
+.card.featured { grid-column: 1 / -1; }
+.card.featured .stage.big { height: 360px; }
+.smalls { flex-wrap: wrap; }
+.archive { grid-column: 1 / -1; margin: 18px 0 0; }
+.archive p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.chip canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.chip span { position: absolute; right: 5px; bottom: 3px; font-size: 9px; color: #888; }
+.smalls button { margin-left: auto; }
+
+@media (max-width: 860px) {
+  .app { grid-template-columns: 1fr; }
+  .panel { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); order: 2; }
+  main { padding: 0 16px 24px; }
+}
+</style>
+</head>
+<body class="stage-dark">
+<div class="app">
+  <aside class="panel">
+    <h1>Blip playground</h1>
+    <p class="muted">Sprout is the chosen character; the other concepts are kept below as an archive. Pick a state, tune the sliders, then copy the settings.</p>
+    <div id="sliders"></div>
+
+    <h3>State colours</h3>
+    <div class="row" id="presets" style="margin-bottom:10px"></div>
+    <div class="colors" id="colors"></div>
+    <table class="contrast" id="contrast"></table>
+    <p class="note">Contrast of each colour against the background. Shapes need at least 3:1 to stand out (WCAG 1.4.11); red numbers fall short. "Backing" is the dark backing plate.</p>
+
+    <h3>Options</h3>
+    <div class="ctl"><label>Eye style <select id="eyeStyle">
+      <option value="auto">Concept default</option><option value="dot">Dots</option>
+      <option value="oval">Ovals</option><option value="bar">Bars</option></select></label></div>
+    <div class="ctl"><label>Busy sign <select id="busy">
+      <option value="sparks">Circling sparks</option><option value="ring">Sweeping ring</option>
+      <option value="none">None</option></select></label></div>
+    <label class="check"><input type="checkbox" id="follow"> Eyes follow the mouse</label>
+    <label class="check"><input type="checkbox" id="mouth"> Mouth</label>
+    <label class="check"><input type="checkbox" id="autoHide"> Done hides itself after 5 s</label>
+    <p class="note">Click a character to poke it. Quick clicks on Sprout: 3 and it says what it is doing, 6 or more and it gets fed up (tired eyes, antenna flopped over) until you stop. The archived concepts flip.</p>
+
+    <h3>Micro animations</h3>
+    <div id="micro"></div>
+
+    <h3>Background</h3>
+    <div class="row" id="bgs">
+      <button data-bg="stage-dark">Dark</button><button data-bg="stage-light">Light</button>
+      <button data-bg="stage-wall">Wallpaper</button><button data-bg="stage-bright">Bright wallpaper</button>
+    </div>
+
+    <h3>Save</h3>
+    <div class="row"><button id="copy">Copy settings</button><button id="reset">Reset all</button></div>
+    <pre id="out" hidden></pre>
+  </aside>
+
+  <main>
+    <div class="statebar" id="states"></div>
+    <div class="screen"><div class="menubar"><span class="dot"></span><b>App</b><span>File</span><span>Edit</span><span>View</span><span class="end">12:00</span></div><canvas id="top"></canvas><canvas id="topSprout"></canvas></div>
+    <div class="screen-row"><span>Top of screen at real size</span><label>Showing <select id="topPick"></select></label></div>
+    <div class="grid" id="grid"></div>
+  </main>
+</div>
+
+<script src="sprout.js"></script>
+<script>
+const TAU = Math.PI * 2;
+const DPR = Math.min(window.devicePixelRatio || 1, 3);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const easeOut = t => 1 - Math.pow(1 - t, 3);
+
+// ---------- colour ----------
+const hexToRgb = h => [0, 2, 4].map(i => parseInt(h.replace('#', '').substr(i, 2), 16));
+function rgbToHsl([r, g, b]) {
+  r /= 255; g /= 255; b /= 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  let h = 0, s = 0; const l = (mx + mn) / 2;
+  if (mx !== mn) {
+    const d = mx - mn;
+    s = l > .5 ? d / (2 - mx - mn) : d / (mx + mn);
+    h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    h /= 6;
+  }
+  return [h, s, l];
+}
+function hslToRgb([h, s, l]) {
+  if (!s) return [l * 255, l * 255, l * 255];
+  const q = l < .5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+  const f = t => { t = (t % 1 + 1) % 1; return t < 1/6 ? p + (q - p) * 6 * t : t < 1/2 ? q : t < 2/3 ? p + (q - p) * (2/3 - t) * 6 : p; };
+  return [f(h + 1/3) * 255, f(h) * 255, f(h - 1/3) * 255];
+}
+const shade = (c, a) => a >= 0 ? c.map(v => v + (255 - v) * a) : c.map(v => v * (1 + a));
+const rgba = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+const mix = (a, b, t) => a.map((v, i) => lerp(v, b[i], t));
+
+// ---------- parameters ----------
+const DEFAULTS = {
+  round: .6, squash: .5, hue: 0, sat: 100, glow: .5, outline: .9,
+  eyeSize: 1, eyeGap: 1, eyeStyle: 'auto', mouth: true, follow: true, busy: 'sparks', backing: 0,
+  speed: 1, bounce: 1, trans: .35, blinkEvery: 3.5, autoHide: false,
+  mBlink: true, mRead: true, mError: true, mDone: true, mContact: true, mChange: true, mGlance: true, mHand: true, eggs: true,
+  colors: { working: '#4f8cff', needs: '#ffb13b', done: '#33c46a', error: '#ff5a5f' },
+  bg: 'stage-dark', top: 'sprout'
+};
+const PRESETS = {
+  Vivid: { working: '#4f8cff', needs: '#ffb13b', done: '#33c46a', error: '#ff5a5f' },
+  Soft: { working: '#8ab4ff', needs: '#ffd27a', done: '#7fdc9f', error: '#ff9a9e' },
+  Deep: { working: '#2f6bea', needs: '#f08c00', done: '#1f9d55', error: '#e03a45' }
+};
+// Backgrounds for the contrast check: the stage colours and both ends of each wallpaper.
+const CONTRAST_BGS = [['Dark', '#17181d'], ['Light', '#e9e8e2'], ['Wall', '#4b5d86'], ['Wall', '#d59a6e'], ['Bright', '#e6eefa'], ['Backing', '#0e0f14']];
+const SLIDERS = [
+  ['Shape', [['round', 'Roundness', 0, 1, .01], ['squash', 'Squish and stretch', 0, 1, .01]]],
+  ['Colour', [['hue', 'Hue shift', -180, 180, 1], ['sat', 'Saturation %', 0, 150, 1], ['glow', 'Glow', 0, 1, .01], ['outline', 'Outline', 0, 1, .01], ['backing', 'Dark backing', 0, 1, .01]]],
+  ['Eyes', [['eyeSize', 'Size', .5, 1.8, .01], ['eyeGap', 'Spacing', .6, 1.6, .01]]],
+  ['Timing', [['speed', 'Speed', .3, 2.5, .01], ['bounce', 'Bounce', 0, 2, .01], ['trans', 'Transition (s)', .1, 1.2, .01], ['blinkEvery', 'Blink every (s)', 1, 8, .1]]]
+];
+const MICRO = [
+  ['mBlink', 'Natural blinks, sometimes double'], ['mRead', 'Reading eyes while working'],
+  ['mGlance', 'Looks around now and then'], ['mError', 'Startle, then flickering bulb on error (Sprout)'],
+  ['mDone', 'Wind-up before the done hop'], ['mContact', 'Eye contact when it needs you'],
+  ['mChange', 'Springy squash on state change'], ['mHand', 'Raised hand when it needs you (Sprout)'], ['eggs', 'Easter eggs (Sprout)']
+];
+const STORE = 'blip-playground-v3';
+let P = structuredClone(DEFAULTS);
+try { const saved = JSON.parse(localStorage.getItem(STORE)); if (saved) P = { ...P, ...saved, colors: { ...P.colors, ...saved.colors } }; } catch (e) {}
+const sprouts = [];
+const save = () => { try { localStorage.setItem(STORE, JSON.stringify(P)); } catch (e) {} renderContrast(); sprouts.forEach(sp => sp.update(P)); };
+
+// ---------- state machine ----------
+const STATES = ['hidden', 'working', 'needs', 'done', 'error'];
+const LABEL = { hidden: 'Hidden', working: 'Working', needs: 'Needs you', done: 'Done', error: 'Error' };
+const SIZE = { working: .74, needs: 1, done: .9, error: .92 };
+const WIDE = { working: 0, needs: 1, done: .55, error: .55 };
+// Lead-in before a state's main motion and effects: the done wind-up and the error jolt (seconds at speed 1).
+const LEAD = { done: .18, error: .25 };
+const S = {
+  state: 'hidden', shown: 'working', age: 0, realAge: 0, t: 0, blend: 1, blinkClock: 1.2,
+  pokeAge: 9, flipAge: 9, clicks: [], changeAge: 9, blinkFactor: 1, double: false,
+  read: { i: 0, clock: 0, x: 0, y: 0, tx: 0, ty: 0 }, glanceAge: 9, glanceIn: 6,
+  vis: { x: 0, v: 0 }, sz: { x: .74, v: 0 }, wide: { x: 0, v: 0 }, col: [79, 140, 255], colFrom: [79, 140, 255]
+};
+function targetCol(s) {
+  const hsl = rgbToHsl(hexToRgb(P.colors[s]));
+  hsl[0] = (hsl[0] + P.hue / 360 + 1) % 1;
+  hsl[1] = clamp(hsl[1] * P.sat / 100, 0, 1);
+  return hslToRgb(hsl);
+}
+function setState(s, fromDemo) {
+  if (!fromDemo) stopDemo();
+  if (s !== 'hidden') {
+    if (s !== S.shown || S.state === 'hidden') S.changeAge = 0;
+    S.colFrom = S.vis.x < .05 ? targetCol(s) : S.col.slice();
+    S.blend = 0;
+    S.shown = s; S.age = 0;
+  }
+  S.state = s; S.realAge = 0;
+  sprouts.forEach(sp => sp.setState(s));
+  document.querySelectorAll('#states [data-s]').forEach(b => b.classList.toggle('on', b.dataset.s === s));
+}
+function spring(o, target, dt, k, z) {
+  const a = k * (target - o.x) - 2 * Math.sqrt(k) * z * o.v;
+  o.v += a * dt; o.x += o.v * dt;
+}
+const DEMO = [['working', 3], ['needs', 3.5], ['working', 2], ['done', 3], ['error', 3], ['hidden', 1.5]];
+let demo = null;
+function startDemo() { demo = { i: 0, left: DEMO[0][1] }; setState(DEMO[0][0], true); document.getElementById('demo').classList.add('on'); }
+function stopDemo() { demo = null; const b = document.getElementById('demo'); if (b) b.classList.remove('on'); }
+
+// ---------- drawing helpers ----------
+function rrect(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+// Superellipse: n=2 is an ellipse, higher n is squarer. f scales radius, gx scales x only.
+function superPath(ctx, w, h, n, f, gx) {
+  ctx.beginPath();
+  const N = 80;
+  for (let i = 0; i <= N; i++) {
+    const th = i / N * TAU, c = Math.cos(th), s = Math.sin(th);
+    const k = f ? f(th) : 1, kx = gx ? gx(th) : 1;
+    const x = Math.sign(c) * Math.pow(Math.abs(c), 2 / n) * w * k * kx;
+    const y = Math.sign(s) * Math.pow(Math.abs(s), 2 / n) * h * k;
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.closePath();
+}
+function glow(ctx, st, c, amt) { ctx.shadowColor = rgba(c, .75); ctx.shadowBlur = amt * st.k; }
+function outline(ctx, st, c, lw) {
+  if (st.P.outline <= 0) return;
+  ctx.shadowBlur = 0; ctx.lineWidth = lw; ctx.strokeStyle = rgba(shade(c, -.6), st.P.outline); ctx.stroke();
+}
+function squashAt(ctx, m, by) { ctx.translate(0, by); ctx.scale(m.sx, m.sy); ctx.translate(0, -by); }
+function twinkle(ctx, x, y, r, rot = 0) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.beginPath(); ctx.moveTo(0, -r);
+  ctx.quadraticCurveTo(0, 0, r, 0); ctx.quadraticCurveTo(0, 0, 0, r);
+  ctx.quadraticCurveTo(0, 0, -r, 0); ctx.quadraticCurveTo(0, 0, 0, -r); ctx.fill(); ctx.restore();
+}
+const moodOf = s => ({ working: 'focus', needs: 'wide', done: 'happy', error: 'oops' })[s];
+
+function eyes(ctx, st, o) {
+  const P = st.P, a = st.raw;
+  let mood = moodOf(st.state), pop = 1;
+  // Startle: wide eyes that pop during the error lead-in, before the squeeze.
+  if (st.state === 'error' && P.mError && st.age < 0) { mood = 'wide'; pop = 1 + .35 * Math.sin(a / LEAD.error * Math.PI); }
+  // Eye contact: slightly bigger eyes looking straight out, easing back to normal from 1 s to 1.4 s.
+  const contact = st.state === 'needs' && P.mContact && a < 1.4, cw = clamp((a - 1) / .4, 0, 1);
+  if (contact) pop = lerp(1.12, 1, cw);
+  const style = P.eyeStyle === 'auto' ? o.style : P.eyeStyle;
+  const r = o.r * P.eyeSize * pop, gap = o.gap * P.eyeGap;
+  ctx.save();
+  ctx.fillStyle = ctx.strokeStyle = o.ink; ctx.lineCap = ctx.lineJoin = 'round';
+  if (o.glow) { ctx.shadowColor = o.glowCol; ctx.shadowBlur = o.glow * st.k; }
+  const lk = o.lk || 1;
+  let lx = (o.lx || 0) + st.look.x * lk, ly = (o.ly || 0) + st.look.y * lk;
+  if (st.state === 'working') {
+    // Reading: quick jumps along a line instead of a smooth drift; the mouse pull is softened.
+    if (P.mRead) { lx = (st.read.x + st.look.x * .4) * lk; ly = (o.ly || 0) + (st.read.y + st.look.y * .4) * lk; }
+    if (P.mGlance) lx += st.glance * lk;
+  }
+  if (contact) { lx = lerp(0, lx, cw); ly = lerp(.8 * lk, ly, cw); }
+  for (const side of [-1, 1]) {
+    ctx.save(); ctx.translate(side * gap + lx, o.y + ly);
+    if (mood === 'happy') {
+      ctx.lineWidth = r * .7; ctx.beginPath(); ctx.arc(0, r * .55, r * .95, Math.PI * 1.12, Math.PI * 1.88); ctx.stroke();
+    } else if (mood === 'oops') {
+      const d = r * .85; ctx.lineWidth = r * .62; ctx.beginPath();
+      ctx.moveTo(side * d * .75, -d); ctx.lineTo(-side * d * .55, 0); ctx.lineTo(side * d * .75, d); ctx.stroke();
+    } else {
+      let sy = 1 - st.blink * .92, rr = r;
+      if (mood === 'wide') rr *= 1.18;
+      if (mood === 'focus') sy *= .78;
+      ctx.scale(1, sy); ctx.beginPath();
+      if (style === 'dot') ctx.arc(0, 0, rr, 0, TAU);
+      else if (style === 'oval') ctx.ellipse(0, 0, rr * .78, rr * 1.22, 0, 0, TAU);
+      else rrect(ctx, -rr * .45, -rr * 1.15, rr * .9, rr * 2.3, rr * .45);
+      ctx.fill();
+      if (mood === 'wide') {
+        ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.beginPath();
+        ctx.arc(style === 'bar' ? 0 : rr * .25, -rr * .5, rr * .27, 0, TAU); ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+}
+function mouth(ctx, st, o) {
+  if (!st.P.mouth) return;
+  const w = o.w, s = st.state;
+  ctx.save(); ctx.translate(0, o.y); ctx.fillStyle = ctx.strokeStyle = o.ink; ctx.lineCap = 'round';
+  if (s === 'needs') { const open = .7 + .3 * Math.sin(st.t * 9); ctx.beginPath(); ctx.ellipse(0, 0, w * .28, w * .32 * open, 0, 0, TAU); ctx.fill(); }
+  else if (s === 'done') { ctx.beginPath(); ctx.moveTo(-w * .5, -w * .12); ctx.quadraticCurveTo(0, w * .75, w * .5, -w * .12); ctx.closePath(); ctx.fill(); }
+  else if (s === 'error') {
+    ctx.lineWidth = w * .2; ctx.beginPath(); ctx.moveTo(-w * .45, w * .1);
+    ctx.quadraticCurveTo(-w * .22, -w * .2, 0, w * .05); ctx.quadraticCurveTo(w * .22, w * .3, w * .45, 0); ctx.stroke();
+  } else { ctx.lineWidth = w * .2; ctx.beginPath(); ctx.moveTo(-w * .16, 0); ctx.lineTo(w * .16, 0); ctx.stroke(); }
+  ctx.restore();
+}
+
+// Damped spring wobble: starts at amp (or at 0 with phase PI/2) and dies away.
+const wobble = (age, amp, decay, freq, phase = 0) => amp * Math.exp(-age * decay) * Math.cos(age * freq - phase);
+
+// Shared body motion per state. Units: the character lives in a 100 x 100 box.
+// st.age is negative during a state's lead-in (the done wind-up, the error jolt); st.raw counts from the switch.
+function motion(st) {
+  const b = st.P.bounce, t = st.t, a = st.age, raw = st.raw;
+  let x = 0, y = 0, rot = 0, sq = 0;
+  if (st.state === 'working') { y = Math.sin(t * 2.4) * 1.6 * b; sq = Math.sin(t * 2.4 + 1.2) * .03 * b; }
+  else if (st.state === 'needs') {
+    const h = Math.sin(((t * 1.7) % 1) * Math.PI);
+    y = -h * 13 * b; sq = (h < .25 ? (.25 - h) / .25 * .2 : -h * .07) * b; rot = Math.sin(t * 3.4) * .07 * b;
+  } else if (st.state === 'done') {
+    // Wind-up: a short crouch before the hop, then a damped wobble after landing.
+    if (a < 0) sq = Math.sin(raw / LEAD.done * Math.PI) * .2 * b;
+    else if (a < .8) { const h = Math.sin(a / .8 * Math.PI); y = -h * 18 * b; sq = -h * .1 * b; }
+    else if (a < 1.05) sq = Math.sin((a - .8) / .25 * Math.PI) * .16 * b;
+    else {
+      rot = Math.sin(t * 2.2) * .06 * b; y = Math.sin(t * 4.4) * b;
+      if (st.P.mDone && a < 1.8) rot += wobble(a - 1.05, .12, 5, 14, Math.PI / 2) * b;
+    }
+  } else if (st.state === 'error') {
+    // Startle: a tiny jump first, then ease into the slump while the shake plays.
+    if (a < 0) y = -Math.sin(raw / LEAD.error * Math.PI) * 5 * b;
+    else {
+      const e = st.P.mError ? Math.min(1, a / .15) : 1;
+      if (a < .6) x = Math.sin(a * 55) * 5 * (1 - a / .6) * b;
+      y = 2 * e; sq = .04 * e;
+    }
+  }
+  if (st.P.mChange && S.changeAge < .6) sq += wobble(S.changeAge, .16, 8, 22);
+  // Poke: squash down, then wobble back. Flip: a hop with one full turn.
+  if (S.pokeAge < 1.2) sq += wobble(S.pokeAge, .3, 6, 16);
+  if (S.flipAge < .8) {
+    const p = S.flipAge / .8;
+    y -= Math.sin(p * Math.PI) * 22; rot += (p < .5 ? 2 * p * p : 1 - 2 * (1 - p) * (1 - p)) * TAU;
+  }
+  sq *= .4 + st.P.squash * 1.2;
+  return { x, y, rot, sx: 1 + sq, sy: 1 - sq };
+}
+
+// ---------- the concepts ----------
+const INK = '#1f1d2b';
+// Orb that turns into a soft five-point star as roundness goes down. Used by Spark and Star in a pill.
+function starBody(ctx, st, r0, lw) {
+  const P = st.P, c = st.col, spikes = (1 - P.round) * .38, rot = st.t * .4;
+  ctx.beginPath();
+  for (let i = 0; i <= 120; i++) {
+    const th = i / 120 * TAU, r = r0 * (1 - spikes * (.5 + .5 * Math.cos(5 * (th - rot))));
+    i ? ctx.lineTo(Math.cos(th) * r, Math.sin(th) * r) : ctx.moveTo(Math.cos(th) * r, Math.sin(th) * r);
+  }
+  ctx.closePath();
+  const g = ctx.createRadialGradient(-r0 * .26, -r0 * .33, 2, 0, 0, r0 * 1.1);
+  g.addColorStop(0, rgba(shade(c, .8))); g.addColorStop(.45, rgba(shade(c, .25))); g.addColorStop(1, rgba(c));
+  glow(ctx, st, c, P.glow * r0 * 1.1); ctx.fillStyle = g; ctx.fill(); outline(ctx, st, c, lw);
+}
+const CONCEPTS = [
+{
+  id: 'squish', name: 'Squish', feel: 'Soft and squishy',
+  blurb: 'A jelly squircle that wobbles, squashes when it lands and hops when it is happy.',
+  box: () => ({ rx: 40, ry: 36, cy: 2 }),
+  draw(ctx, st, m) {
+    const P = st.P, c = st.col, t = st.t, s = st.state;
+    squashAt(ctx, m, 34);
+    const n = 2 + (1 - P.round) * 4.5;
+    const amp = (.012 + .03 * P.squash) * (s === 'needs' ? 1.8 : 1);
+    const f = th => 1 + amp * (Math.sin(3 * th + t * 3.1) + Math.sin(2 * th - t * 2.3));
+    ctx.save(); ctx.translate(0, 2);
+    const g = ctx.createLinearGradient(0, -32, 0, 32);
+    g.addColorStop(0, rgba(shade(c, .3))); g.addColorStop(.55, rgba(c)); g.addColorStop(1, rgba(shade(c, -.18)));
+    superPath(ctx, 37, 32, n, f); glow(ctx, st, c, P.glow * 22); ctx.fillStyle = g; ctx.fill(); outline(ctx, st, c, 3);
+    ctx.restore();
+    ctx.save(); ctx.fillStyle = 'rgba(255,255,255,.42)'; ctx.translate(-17 + P.round * 3, -16); ctx.rotate(-.6);
+    ctx.beginPath(); ctx.ellipse(0, 0, 7, 3.6, 0, 0, TAU); ctx.fill(); ctx.restore();
+    eyes(ctx, st, { y: -2, gap: 12, r: 5.4, style: 'oval', ink: INK, lx: s === 'working' ? Math.sin(t * 1.1) * 2.4 : 0 });
+    mouth(ctx, st, { y: 11, w: 9, ink: INK });
+  }
+},
+{
+  id: 'drop', name: 'Drop', feel: 'Soft droplet',
+  blurb: 'A jelly droplet whose tip sways like a curl: it flicks fast when it needs you and flops over on an error.',
+  box: () => ({ rx: 32, ry: 42, cy: -1 }),
+  draw(ctx, st, m) {
+    const P = st.P, c = st.col, t = st.t, s = st.state;
+    squashAt(ctx, m, 38);
+    const R = 28, cy = 10;
+    let tx, ty = -40;
+    if (s === 'needs') tx = Math.sin(t * 9) * 9 * P.bounce;
+    else if (s === 'error') { tx = 16 + Math.sin(t * 1.5); ty = -27; }
+    else if (s === 'done') tx = Math.sin(t * 2.4) * 4;
+    else tx = Math.sin(t * 1.6) * 6;
+    const k = .45 + .55 * P.round;
+    ctx.beginPath(); ctx.moveTo(tx, ty);
+    ctx.bezierCurveTo(tx + 3, ty + 16 * k + 4, R, cy - R * (.6 + .5 * k), R, cy);
+    ctx.arc(0, cy, R, 0, Math.PI);
+    ctx.bezierCurveTo(-R, cy - R * (.6 + .5 * k), tx - 3, ty + 16 * k + 4, tx, ty);
+    ctx.closePath();
+    const g = ctx.createLinearGradient(0, -40, 0, 38);
+    g.addColorStop(0, rgba(shade(c, .35))); g.addColorStop(.6, rgba(c)); g.addColorStop(1, rgba(shade(c, -.18)));
+    glow(ctx, st, c, P.glow * 22); ctx.fillStyle = g; ctx.fill(); outline(ctx, st, c, 3);
+    ctx.save(); ctx.fillStyle = 'rgba(255,255,255,.42)'; ctx.translate(-14, -4); ctx.rotate(-1);
+    ctx.beginPath(); ctx.ellipse(0, 0, 7, 3.4, 0, 0, TAU); ctx.fill(); ctx.restore();
+    eyes(ctx, st, { y: 11, gap: 10, r: 4.8, style: 'dot', ink: INK, lx: s === 'working' ? Math.sin(t * 1.1) * 2 : 0 });
+    mouth(ctx, st, { y: 22, w: 8, ink: INK });
+  }
+},
+{
+  id: 'spark', name: 'Spark', feel: 'Glowing light',
+  blurb: 'A little ball of light with sparks. Lower the roundness to turn the orb into a star.',
+  box: () => ({ rx: 32, ry: 32, cy: 0 }),
+  draw(ctx, st, m) {
+    const P = st.P, c = st.col, t = st.t, s = st.state, a = st.age;
+    const pulse = s === 'needs' ? .12 * Math.sin(t * 7) : .05 * Math.sin(t * 2.5);
+    const hr = (34 + 30 * P.glow) * (1 + pulse);
+    let g = ctx.createRadialGradient(0, 0, 10, 0, 0, hr);
+    g.addColorStop(0, rgba(c, .5)); g.addColorStop(1, rgba(c, 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, hr, 0, TAU); ctx.fill();
+
+    ctx.save();
+    if (s === 'error') ctx.globalAlpha = .75 + .25 * Math.abs(Math.sin(t * 23) * Math.sin(t * 7.3));
+    squashAt(ctx, m, 27);
+    starBody(ctx, st, 27, 2.5);
+    eyes(ctx, st, { y: -1, gap: 9, r: 4.6, style: 'bar', ink: INK, lx: s === 'working' ? Math.sin(t * 1.1) * 2 : 0 });
+    mouth(ctx, st, { y: 10, w: 7, ink: INK });
+    ctx.restore();
+
+    const pc = rgba(shade(c, .55));
+    ctx.save(); ctx.fillStyle = pc; glow(ctx, st, c, 6);
+    const dot = (x, y, r, al) => { ctx.globalAlpha = clamp(al, 0, 1); ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill(); };
+    if (s === 'needs') for (let i = 0; i < 6; i++) {
+      const ph = (t * 1.3 + i / 6) % 1, an = i * TAU / 6 + .3, d = 31 + ph * 24;
+      dot(Math.cos(an) * d, Math.sin(an) * d, 3 * (1 - ph * .5), 1 - ph);
+    } else if (s === 'done') {
+      if (a >= 0 && a < 1.2) for (let i = 0; i < 10; i++) { const an = i * TAU / 10, d = 28 + a * 36; dot(Math.cos(an) * d, Math.sin(an) * d, 2.6, 1 - a / 1.2); }
+      [[-36, -26], [37, -18], [31, 28]].forEach(([x, y], i) => { ctx.globalAlpha = 1; twinkle(ctx, x, y, 5.5 * (.35 + .65 * Math.sin(t * 2.5 + i * 2) ** 2)); });
+    } else if (s === 'error' && a >= 0) for (let i = 0; i < 3; i++) { const ph = ((a * 18 + i * 9) % 22) / 22; dot(-12 + i * 12, 27 + ph * 22, 2.4, 1 - ph); }
+    ctx.restore();
+  }
+},
+{
+  id: 'starpill', name: 'Star in a pill', feel: 'Glow on a backing',
+  blurb: 'The Spark star sitting on its own small dark capsule, so it stays easy to see on any wallpaper.',
+  box: st => ({ rx: (66 + 34 * st.wide) / 2, ry: 23, cy: 0 }),
+  draw(ctx, st, m) {
+    const P = st.P, c = st.col, t = st.t, s = st.state;
+    const H = 46, W = 66 + 34 * st.wide, R = H / 2 * (.2 + .8 * P.round);
+    squashAt(ctx, m, H / 2);
+    ctx.save(); rrect(ctx, -W / 2, -H / 2, W, H, R); glow(ctx, st, c, 4 + P.glow * 16); ctx.fillStyle = '#0d0e13'; ctx.fill();
+    ctx.shadowBlur = 0; ctx.lineWidth = 1.5; ctx.strokeStyle = rgba(c, .2 + P.outline * .6); ctx.stroke(); ctx.clip();
+    const g = ctx.createRadialGradient(0, 0, 4, 0, 0, 34);
+    g.addColorStop(0, rgba(c, .45)); g.addColorStop(1, rgba(c, 0));
+    ctx.fillStyle = g; ctx.fillRect(-W / 2, -H / 2, W, H);
+    ctx.restore();
+    ctx.save();
+    if (s === 'error') ctx.globalAlpha = .75 + .25 * Math.abs(Math.sin(t * 23) * Math.sin(t * 7.3));
+    starBody(ctx, st, 17, 1.5);
+    eyes(ctx, st, { y: -1, gap: 5.5, r: 3, style: 'bar', ink: INK, lk: .5, lx: s === 'working' ? Math.sin(t * 1.1) * 1.2 : 0 });
+    mouth(ctx, st, { y: 6, w: 4.5, ink: INK });
+    ctx.restore();
+    const lit = shade(c, .5);
+    ctx.fillStyle = rgba(lit); ctx.strokeStyle = rgba(lit);
+    if (s === 'needs') {
+      const ph = (t * 1.6) % 1; ctx.globalAlpha = 1 - ph; ctx.lineWidth = 2;
+      for (const side of [-1, 1]) { ctx.beginPath(); ctx.arc(side * (W / 2 - 11), 0, 2 + ph * 5, 0, TAU); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+    } else if (s === 'done') {
+      twinkle(ctx, -W / 2 + 12, -6, 4 * (.5 + .5 * Math.sin(t * 3)));
+      twinkle(ctx, W / 2 - 12, 5, 4 * (.5 + .5 * Math.sin(t * 3 + 2)));
+    }
+  }
+},
+{
+  id: 'sprout', name: 'Sprout', feel: 'Curious creature',
+  external: true, // drawn by sprout.js, the same file the Blip app uses
+  blurb: 'A little egg creature with a light-bulb antenna. While working, a signal runs up the antenna and the bulb flashes; it raises a hand when it needs you and droops on an error.'
+},
+{
+  id: 'pill', name: 'Pill', feel: 'Minimal signal',
+  blurb: 'A dark capsule that sits like part of the screen edge. Only the eyes and rim carry the colour, and it widens when it has news.',
+  box: st => ({ rx: (64 + 50 * st.wide) / 2, ry: 20, cy: 0 }),
+  draw(ctx, st, m) {
+    const P = st.P, c = st.col, t = st.t, s = st.state;
+    const H = 40, W = 64 + 50 * st.wide, R = H / 2 * (.2 + .8 * P.round);
+    squashAt(ctx, m, H / 2);
+    ctx.save(); rrect(ctx, -W / 2, -H / 2, W, H, R); glow(ctx, st, c, 6 + P.glow * 24); ctx.fillStyle = '#0d0e13'; ctx.fill();
+    ctx.shadowBlur = 0; ctx.lineWidth = 2; ctx.strokeStyle = rgba(c, .25 + P.outline * .7); ctx.stroke(); ctx.clip();
+    if (s === 'working') {
+      const sw = 30, x = ((t * .55) % 1) * (W + sw * 2) - W / 2 - sw;
+      const g = ctx.createLinearGradient(x - sw, 0, x + sw, 0);
+      g.addColorStop(0, rgba(c, 0)); g.addColorStop(.5, rgba(c, .3)); g.addColorStop(1, rgba(c, 0));
+      ctx.fillStyle = g; ctx.fillRect(x - sw, -H / 2, sw * 2, H);
+    }
+    ctx.restore();
+    const lit = shade(c, .25);
+    eyes(ctx, st, { y: 0, gap: 10 + 4 * st.wide, r: 5, style: 'oval', ink: rgba(lit), glow: 7, glowCol: rgba(c, .9), lx: s === 'working' ? Math.sin(t * 1.1) * 2.5 : 0 });
+    if (s === 'needs') {
+      const ph = (t * 1.6) % 1;
+      ctx.strokeStyle = rgba(lit, 1 - ph); ctx.lineWidth = 2;
+      for (const side of [-1, 1]) { ctx.beginPath(); ctx.arc(side * (W / 2 - 10), 0, 2 + ph * 5, 0, TAU); ctx.stroke(); }
+    } else if (s === 'done') {
+      ctx.fillStyle = rgba(lit); twinkle(ctx, W / 2 - 11, -5, 5 * (.6 + .4 * Math.sin(t * 3)));
+    }
+  }
+}
+];
+
+// ---------- views ----------
+const views = [];
+// A press on any canvas (main button only) goes to everything: the archived concepts get their poke at once,
+// and every Sprout gets the press, so clicks and the 3 s hold show on all views.
+function sproutPointer(cv) {
+  cv.addEventListener('pointerdown', e => { if (e.button !== 0) return; poke(); sprouts.forEach(sp => sp.press()); });
+  cv.addEventListener('pointerup', e => { if (e.button === 0) sprouts.forEach(sp => sp.release()); });
+  for (const ev of ['pointerleave', 'pointercancel']) cv.addEventListener(ev, () => sprouts.forEach(sp => sp.cancel()));
+}
+function addView(el, concept, opts) {
+  const cv = el.querySelector('canvas');
+  sproutPointer(cv);
+  // Sprout comes from sprout.js: one instance per canvas, driven by setState, press/release and save.
+  if (concept.external) {
+    // Only the large view shows the speech bubble, so a triple click does not open five at once.
+    sprouts.push(BlipSprout.create(cv, { size: opts.big ? 'fit' : opts.scale * 75, settings: P, handlePress: false, bubble: !!opts.big }));
+    return;
+  }
+  const v = { el, cv, ctx: cv.getContext('2d'), concept, look: { x: 0, y: 0 }, ...opts };
+  views.push(v);
+  new ResizeObserver(() => sizeView(v)).observe(el);
+  sizeView(v);
+  return v;
+}
+function sizeView(v) {
+  v.cw = v.el.clientWidth; v.ch = v.el.clientHeight;
+  v.cv.width = Math.round(v.cw * DPR); v.cv.height = Math.round(v.ch * DPR);
+  if (v.big) v.scale = Math.min(v.max, v.cw / 150, v.ch / 140);
+}
+function render(v, frameSt) {
+  const { ctx } = v, concept = typeof v.concept === 'function' ? v.concept() : v.concept;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, v.cv.width, v.cv.height);
+  if (concept.external) return; // the top-of-screen Sprout has its own canvas
+  const k = DPR * v.scale, cy = v.cy != null ? v.cy : v.ch / 2 + (v.big ? 10 : 0);
+  ctx.setTransform(k, 0, 0, k, v.cw * DPR / 2, cy * DPR);
+  if (v.big && S.vis.x < .03) {
+    ctx.setLineDash([4, 5]); ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(150,150,160,.35)';
+    ctx.beginPath(); ctx.arc(0, 0, 30, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+  }
+  // Eyes follow the mouse: aim from this view's character towards the pointer, eased.
+  let tx = 0, ty = 0;
+  if (frameSt.P.follow && mouse) {
+    const r = v.el.getBoundingClientRect();
+    const dx = mouse.x - (r.left + v.cw / 2), dy = mouse.y - (r.top + cy), d = Math.hypot(dx, dy);
+    if (d > 1) { const f = Math.min(1, d / 250); tx = dx / d * f * 3.2; ty = dy / d * f * 2.6; }
+  }
+  v.look.x += (tx - v.look.x) * .18; v.look.y += (ty - v.look.y) * .18;
+  if (S.vis.x <= .002) return;
+  const st = { ...frameSt, k, look: v.look };
+  const m = motion(st), box = concept.box(st), P = st.P, c = st.col;
+  ctx.save(); ctx.translate(m.x, m.y); ctx.rotate(m.rot);
+  const s = S.vis.x * S.sz.x; ctx.scale(s, s);
+  if (P.backing > 0) {
+    const pad = 9;
+    ctx.fillStyle = `rgba(14,15,20,${P.backing})`;
+    rrect(ctx, -box.rx - pad, box.cy - box.ry - pad, (box.rx + pad) * 2, (box.ry + pad) * 2, Math.min(box.rx, box.ry) * .6 + pad);
+    ctx.fill();
+  }
+  ctx.save(); concept.draw(ctx, st, m); ctx.restore();
+  drawBusy(ctx, st, box);
+  if (st.state === 'error' && P.mError && st.age > 0) drawScribble(ctx, st, box);
+  if (S.pokeAge < .6) {
+    const p = S.pokeAge / .6;
+    ctx.fillStyle = rgba(shade(c, .6)); glow(ctx, st, c, 5);
+    for (let i = 0; i < 8; i++) {
+      const an = i * TAU / 8 + .2;
+      twinkle(ctx, Math.cos(an) * (box.rx + 4 + p * 22), box.cy + Math.sin(an) * (box.ry + 4 + p * 22), 4.5 * (1 - p));
+    }
+  }
+  ctx.restore();
+}
+// Busy sign while working: three sparks or a glowing arc travelling round an ellipse just outside the body.
+function drawBusy(ctx, st, box) {
+  if (st.state !== 'working' || st.P.busy === 'none') return;
+  const rx = box.rx + 9, ry = box.ry + 9, c = shade(st.col, .45), t = st.t;
+  ctx.save(); ctx.translate(0, box.cy); glow(ctx, st, st.col, 6); ctx.fillStyle = rgba(c);
+  if (st.P.busy === 'sparks') {
+    for (let i = 0; i < 3; i++) {
+      const an = t * 2.4 + i * TAU / 3;
+      ctx.beginPath(); ctx.arc(Math.cos(an) * rx, Math.sin(an) * ry, 2.6 + .6 * Math.sin(t * 5 + i), 0, TAU); ctx.fill();
+    }
+  } else {
+    const head = t * 3;
+    for (let i = 0; i < 14; i++) {
+      const an = head - i * .09;
+      ctx.globalAlpha = 1 - i / 14;
+      ctx.beginPath(); ctx.arc(Math.cos(an) * rx, Math.sin(an) * ry, 2.4 * (1 - i / 22), 0, TAU); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+// Frustration scribble: a tangled loop above the head that jitters, the comic sign for "ugh".
+function drawScribble(ctx, st, box) {
+  const t = st.t, grow = Math.min(1, st.age / .25);
+  ctx.save();
+  ctx.translate(box.rx * .45, box.cy - box.ry - 9); ctx.scale(grow, grow);
+  ctx.strokeStyle = rgba(shade(st.col, .5)); ctx.lineWidth = 1.8; ctx.lineCap = ctx.lineJoin = 'round';
+  glow(ctx, st, st.col, 3);
+  ctx.beginPath();
+  for (let i = 0; i <= 34; i++) {
+    const an = i * .95 + Math.floor(t * 8) * .7, r = 4.5 + 2.2 * Math.sin(i * 1.7 + Math.floor(t * 8));
+    const x = Math.cos(an) * r * 1.5, y = Math.sin(an) * r * .9;
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+// Look around: a quick glance left, then right, then back to centre.
+function glanceOffset(a) {
+  if (a >= 1.1) return 0;
+  if (a < .12) return -3 * a / .12;
+  if (a < .5) return -3;
+  if (a < .62) return lerp(-3, 3, (a - .5) / .12);
+  if (a < .95) return 3;
+  return 3 * (1 - (a - .95) / .15);
+}
+let mouse = null;
+addEventListener('pointermove', e => { mouse = { x: e.clientX, y: e.clientY }; });
+function poke() {
+  if (S.vis.x < .3) return;
+  const now = performance.now();
+  S.clicks = S.clicks.filter(t => now - t < 900); S.clicks.push(now);
+  S.pokeAge = 0;
+  if (S.clicks.length >= 3) { S.flipAge = 0; S.clicks = []; }
+}
+function contrast(a, b) {
+  const L = c => { const [r, g, bl] = c.map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); }); return .2126 * r + .7152 * g + .0722 * bl; };
+  const x = L(a), y = L(b);
+  return (Math.max(x, y) + .05) / (Math.min(x, y) + .05);
+}
+function renderContrast() {
+  const el = document.getElementById('contrast'); if (!el) return;
+  let html = '<tr><th></th>' + CONTRAST_BGS.map(([n, h]) => `<th title="${h}"><span class="sw" style="background:${h}"></span></th>`).join('') + '</tr>';
+  html += '<tr><td></td>' + CONTRAST_BGS.map(([n]) => `<td class="ok">${n}</td>`).join('') + '</tr>';
+  for (const s of Object.keys(P.colors)) {
+    const c = targetCol(s);
+    html += `<tr><td><span class="sw" style="background:${rgba(c)}"></span>${LABEL[s]}</td>` +
+      CONTRAST_BGS.map(([, h]) => { const r = contrast(c, hexToRgb(h)); return `<td class="${r < 3 ? 'bad' : 'ok'}">${r.toFixed(1)}</td>`; }).join('') + '</tr>';
+  }
+  el.innerHTML = html;
+}
+
+// ---------- UI ----------
+const SMALL = .43; // 75 units of body is about 32 px
+const grid = document.getElementById('grid');
+const topPick = document.getElementById('topPick');
+const FEATURED = 'sprout';
+const ordered = [...CONCEPTS].sort((a, b) => (b.id === FEATURED) - (a.id === FEATURED));
+ordered.forEach(c => {
+  const featured = c.id === FEATURED;
+  if (c === ordered[1]) grid.insertAdjacentHTML('beforeend', '<div class="archive"><h2>Archive</h2><p>The other concepts from rounds 1 and 2, kept for reference.</p></div>');
+  const card = document.createElement('article');
+  card.className = 'card' + (featured ? ' featured' : ''); card.dataset.id = c.id;
+  const extra = featured ? '<div class="chip wall"><canvas></canvas><span>32 px</span></div><div class="chip bright"><canvas></canvas><span>32 px</span></div>' : '';
+  card.innerHTML = `<header><h2>${c.name}</h2><span class="tag">${c.feel}</span></header>
+    <p class="blurb">${c.blurb}</p>
+    <div class="stage big"><canvas></canvas></div>
+    <div class="smalls"><div class="chip dark"><canvas></canvas><span>32 px</span></div>
+    <div class="chip light"><canvas></canvas><span>32 px</span></div>${extra}
+    <button>Show on screen</button></div>`;
+  grid.appendChild(card);
+  addView(card.querySelector('.stage'), c, { big: true, max: featured ? 2.6 : 2 });
+  card.querySelectorAll('.chip').forEach(ch => addView(ch, c, { scale: SMALL }));
+  card.querySelector('button').onclick = () => pickTop(c.id);
+  topPick.add(new Option(c.name, c.id));
+});
+const byId = id => CONCEPTS.find(c => c.id === id) || CONCEPTS[0];
+addView(document.querySelector('.screen'), () => byId(P.top), { scale: SMALL, cy: 52 });
+const topSprout = document.getElementById('topSprout');
+sproutPointer(topSprout);
+sprouts.push(BlipSprout.create(topSprout, { size: 32, settings: P, handlePress: false }));
+function pickTop(id) {
+  if (!CONCEPTS.some(c => c.id === id)) id = CONCEPTS[0].id;
+  P.top = id; topPick.value = id; save();
+  topSprout.style.display = byId(id).external ? '' : 'none';
+  document.querySelectorAll('.card').forEach(c => c.classList.toggle('picked', c.dataset.id === id));
+}
+topPick.onchange = () => pickTop(topPick.value);
+
+const states = document.getElementById('states');
+STATES.forEach((s, i) => {
+  const b = document.createElement('button');
+  b.dataset.s = s; b.innerHTML = `${LABEL[s]}<span class="key">${i + 1}</span>`;
+  b.onclick = () => setState(s);
+  states.appendChild(b);
+});
+states.insertAdjacentHTML('beforeend', '<span class="sep"></span><button id="demo">Play demo loop</button>');
+document.getElementById('demo').onclick = () => demo ? stopDemo() : startDemo();
+addEventListener('keydown', e => {
+  if (e.target.matches('input, select')) return;
+  const i = +e.key - 1; if (i >= 0 && i < STATES.length) setState(STATES[i]);
+});
+
+const sliders = document.getElementById('sliders');
+function buildControls() {
+  sliders.innerHTML = '';
+  SLIDERS.forEach(([group, items]) => {
+    sliders.insertAdjacentHTML('beforeend', `<h3>${group}</h3>`);
+    items.forEach(([key, label, min, max, step]) => {
+      const d = document.createElement('div'); d.className = 'ctl';
+      d.innerHTML = `<label>${label}<output></output></label><input type="range" min="${min}" max="${max}" step="${step}">`;
+      const inp = d.querySelector('input'), out = d.querySelector('output');
+      const show = () => out.textContent = (+P[key]).toFixed(step < 1 ? 2 : 0);
+      inp.value = P[key]; show();
+      inp.oninput = () => { P[key] = +inp.value; show(); save(); };
+      sliders.appendChild(d);
+    });
+  });
+  const presets = document.getElementById('presets'); presets.innerHTML = '';
+  Object.entries(PRESETS).forEach(([name, cols]) => {
+    const b = document.createElement('button'); b.textContent = name;
+    b.classList.toggle('on', Object.keys(cols).every(s => cols[s] === P.colors[s]));
+    b.onclick = () => { P.colors = { ...cols }; save(); buildControls(); };
+    presets.appendChild(b);
+  });
+  const colors = document.getElementById('colors'); colors.innerHTML = '';
+  Object.keys(P.colors).forEach(s => {
+    const l = document.createElement('label');
+    l.innerHTML = `<input type="color" value="${P.colors[s]}"> ${LABEL[s]}`;
+    l.querySelector('input').oninput = e => { P.colors[s] = e.target.value; save(); };
+    colors.appendChild(l);
+  });
+  const es = document.getElementById('eyeStyle'); es.value = P.eyeStyle; es.onchange = () => { P.eyeStyle = es.value; save(); };
+  const bs = document.getElementById('busy'); bs.value = P.busy; bs.onchange = () => { P.busy = bs.value; save(); };
+  const micro = document.getElementById('micro'); micro.innerHTML = '';
+  MICRO.forEach(([id, label]) => micro.insertAdjacentHTML('beforeend', `<label class="check"><input type="checkbox" id="${id}"> ${label}</label>`));
+  for (const id of ['mouth', 'autoHide', 'follow', ...MICRO.map(m => m[0])]) { const cb = document.getElementById(id); cb.checked = P[id]; cb.onchange = () => { P[id] = cb.checked; save(); }; }
+  setBg(P.bg); pickTop(P.top);
+}
+function setBg(bg) {
+  P.bg = bg; document.body.className = bg; save();
+  document.querySelectorAll('#bgs button').forEach(b => b.classList.toggle('on', b.dataset.bg === bg));
+}
+document.querySelectorAll('#bgs button').forEach(b => b.onclick = () => setBg(b.dataset.bg));
+document.getElementById('reset').onclick = () => { P = structuredClone(DEFAULTS); save(); buildControls(); };
+document.getElementById('copy').onclick = async () => {
+  const { bg, ...rest } = P;
+  const text = JSON.stringify({ concept: P.top, ...rest }, null, 2);
+  const out = document.getElementById('out'); out.hidden = false; out.textContent = text;
+  try { await navigator.clipboard.writeText(text); document.getElementById('copy').textContent = 'Copied'; } catch (e) { document.getElementById('copy').textContent = 'Select the text below'; }
+  setTimeout(() => document.getElementById('copy').textContent = 'Copy settings', 1600);
+};
+buildControls();
+setState('working');
+
+// ---------- loop ----------
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  S.t += dt * P.speed; S.age += dt * P.speed; S.realAge += dt;
+  S.pokeAge += dt * P.speed; S.flipAge += dt * P.speed; S.changeAge += dt * P.speed; S.glanceAge += dt * P.speed;
+  // Reading: three lines of four fixations, a longer pause at each line end.
+  const R = S.read;
+  if (S.shown === 'working' && (R.clock -= dt * P.speed) <= 0) {
+    R.i = (R.i + 1) % 12;
+    const col = R.i % 4, line = Math.floor(R.i / 4);
+    R.tx = -2.4 + col * 1.6; R.ty = -.8 + line * .8;
+    R.clock = col === 3 ? .6 : .22 + Math.random() * .3;
+  }
+  R.x += (R.tx - R.x) * Math.min(1, dt * 30); R.y += (R.ty - R.y) * Math.min(1, dt * 30);
+  if (S.shown === 'working' && (S.glanceIn -= dt * P.speed) <= 0) { S.glanceAge = 0; S.glanceIn = 8 + Math.random() * 7; }
+  const w = 4 / P.trans, k = w * w, hidden = S.state === 'hidden';
+  spring(S.vis, hidden ? 0 : 1, dt, k, hidden ? .9 : .5);
+  if (!hidden) { spring(S.sz, SIZE[S.state], dt, k, .45); spring(S.wide, WIDE[S.state], dt, k, .6); }
+  S.blend = Math.min(1, S.blend + dt / P.trans);
+  S.col = mix(S.colFrom, targetCol(S.shown), easeOut(S.blend));
+  // Blinks: random gaps around the slider value and an occasional double blink when natural blinks are on.
+  S.blinkClock += dt;
+  // The random factor is kept, not the interval, so the slider takes effect at once.
+  if (S.blinkClock > P.blinkEvery * S.blinkFactor) {
+    S.blinkClock = 0;
+    S.blinkFactor = P.mBlink ? .5 + Math.random() : 1;
+    S.double = P.mBlink && Math.random() < .2;
+  }
+  const one = x => x >= 0 && x < .14 ? Math.sin(x / .14 * Math.PI) : 0;
+  const blink = Math.max(one(S.blinkClock), S.double ? one(S.blinkClock - .22) : 0);
+  if (P.autoHide && S.state === 'done' && S.realAge > 5) setState('hidden', !!demo);
+  if (demo && (demo.left -= dt) <= 0) {
+    demo.i = (demo.i + 1) % DEMO.length; demo.left = DEMO[demo.i][1]; setState(DEMO[demo.i][0], true);
+  }
+  const lead = (S.shown === 'done' && P.mDone) || (S.shown === 'error' && P.mError) ? LEAD[S.shown] : 0;
+  const frameSt = { state: S.shown, t: S.t, age: S.age - lead, raw: S.age, wide: S.wide.x, col: S.col, P, blink, read: R, glance: glanceOffset(S.glanceAge) };
+  views.forEach(v => render(v, frameSt));
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
