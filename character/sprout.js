@@ -15,6 +15,7 @@
 //                                 // handling on the canvas); holding 3 s grows the leaf
 //   sprout.say(text);             // a short speech bubble next to Sprout (three quick clicks show the state line);
 //                                 // opts.bubbleBeside puts it beside the body instead of above the head
+//   sprout.say(text, announce, hold, detail);  // detail: a smaller grey line under it, cut with "…" when long
 //   sprout.line                   // the current state's line ("All done!"...), for a host that says it on a change
 //   sprout.update(settings);      // change some settings live; the rest keep their values
 //   Options for testing the easter eggs: opts.luck (chance of a lucky leaf per done), opts.date (a function
@@ -452,7 +453,10 @@
     let eggTimer = 0;
     function sayLater(text) {
       clearTimeout(eggTimer);
-      eggTimer = setTimeout(() => { if (S.state === 'done') say(text); }, 400);
+      // The egg takes over the done line but keeps its detail and stays at least as long.
+      eggTimer = setTimeout(() => {
+        if (S.state === 'done') say(text, true, Math.max(BUBBLE_TIME * 1000, bubbleUntil - performance.now()), bubbleOpen ? bubbleDetail : null);
+      }, 400);
     }
     // A done moment: birthday confetti once a day, every ROLL_EVERY in a row stars, sometimes a lucky leaf.
     function doneEggs() {
@@ -503,7 +507,7 @@
     function lookAt(x, y) { S.mouse = { x, y }; S.mouseAt = performance.now(); }
 
     // Speech bubble: a small HTML element next to the canvas (text at canvas scale would be too small at 32 px).
-    let bubble = null, bubbleTimer = 0, bubbleOpen = false;
+    let bubble = null, bubbleTimer = 0, bubbleOpen = false, bubbleText = '', bubbleDetail = null, bubbleUntil = 0;
     function hideBubble() {
       clearTimeout(bubbleTimer); bubbleOpen = false;
       S.bubbleAge = Math.max(S.bubbleAge, BUBBLE_TIME); // the curious tilt ends with the bubble
@@ -511,13 +515,19 @@
     }
     // announce: whether screen readers read it out (a new line yes, the same line kept open no).
     // hold: how long the bubble stays, in ms (the fed-up line stays as long as the fed-up face).
-    function say(text, announce = true, hold = BUBBLE_TIME * 1000) {
+    // detail: a second, smaller line; left out, a bubble already showing the same line keeps its own.
+    function say(text, announce = true, hold = BUBBLE_TIME * 1000, detail) {
       if (opts.bubble === false || S.state === 'hidden') return;
       // Restart the curious tilt only when the bubble was closed, so lines while it is open do not twitch.
       if (!bubbleOpen) S.bubbleAge = 0;
-      // Same line already showing (clicks while fed up): only keep it open longer.
-      if (bubbleOpen && bubble.textContent === text) { clearTimeout(bubbleTimer); bubbleTimer = setTimeout(hideBubble, hold); return; }
-      bubbleOpen = true;
+      const now = performance.now();
+      // Same line already showing (clicks while fed up, or 3 clicks on a spoken line): keep it open,
+      // never for less time than it already had.
+      if (bubbleOpen && bubbleText === text && (detail === undefined || detail === bubbleDetail)) {
+        hold = Math.max(hold, bubbleUntil - now);
+        clearTimeout(bubbleTimer); bubbleTimer = setTimeout(hideBubble, hold); bubbleUntil = now + hold; return;
+      }
+      bubbleOpen = true; bubbleText = text; bubbleDetail = detail || null;
       if (!bubble) {
         bubble = document.createElement('div');
         Object.assign(bubble.style, {
@@ -531,6 +541,15 @@
       }
       bubble.setAttribute('aria-live', announce ? 'polite' : 'off');
       bubble.textContent = text;
+      if (bubbleDetail) {
+        const small = document.createElement('div');
+        Object.assign(small.style, {
+          fontSize: '11px', fontWeight: 400, lineHeight: 1.25, color: '#6b6878', marginTop: '2px',
+          maxWidth: '250px', overflow: 'hidden', textOverflow: 'ellipsis'
+        });
+        small.textContent = bubbleDetail;
+        bubble.appendChild(small);
+      }
       // Bottom-left corner of the bubble just above and right of the head (24, -50 in drawing units),
       // or with opts.bubbleBeside beside the body at eye level (48, 6), for a window with little room above.
       const r = canvas.getBoundingClientRect(), u = drawPx() / UNITS_PER_SIZE;
@@ -545,7 +564,7 @@
       bubble.style.top = (r.top + root.scrollY + ch * .6 + by * u - bubble.offsetHeight) + 'px';
       requestAnimationFrame(() => { bubble.style.opacity = 1; bubble.style.transform = 'scale(1)'; });
       clearTimeout(bubbleTimer);
-      bubbleTimer = setTimeout(hideBubble, hold);
+      bubbleTimer = setTimeout(hideBubble, hold); bubbleUntil = now + hold;
     }
     const onMove = e => lookAt(e.clientX, e.clientY);
     // Pointer on Sprout: a press shorter than the hold time is a click (poke on release); holding long enough

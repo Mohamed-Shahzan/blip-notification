@@ -30,14 +30,40 @@ new ResizeObserver(sendBox).observe(canvas);
 const NAMES = { needs_you: "needs" };
 
 // Sprout says its line when it changes to one of these. Working stays quiet,
-// since it starts every turn. The line stays about as long as Done shows (5 s).
+// since it starts every turn. Done's bubble closes when Rust hides Sprout.
 const SPEAKS = ["needs", "done", "error"];
-const SPEAK_FOR = 5000;
+const SPEAK_FOR = 6000;
+// Several permissions in a row flip needs you and working back and forth;
+// the same line again this soon stays unsaid.
+const REPEAT_GAP = 10000;
+let spoke = { state: "", at: -Infinity };
+
+// The message snippet under the line (PRD Level 1). Right-click Sprout hides or
+// shows it; the choice is kept between launches.
+const SHOW_TEXT = "blip.showText";
+let showText = true;
+try {
+  showText = localStorage.getItem(SHOW_TEXT) !== "off";
+} catch {}
+canvas.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  showText = !showText;
+  try {
+    localStorage.setItem(SHOW_TEXT, showText ? "on" : "off");
+  } catch {}
+  sprout.say(showText ? "Message text on" : "Message text off", true, 1500, null);
+});
 
 listen("blip-state", (event) => {
-  const state = NAMES[event.payload] || event.payload;
+  const { text } = event.payload;
+  const state = NAMES[event.payload.state] || event.payload.state;
   sprout.setState(state);
-  if (SPEAKS.includes(state)) sprout.say(sprout.line, true, SPEAK_FOR);
+  const now = performance.now();
+  if (state === "hidden") spoke = { state: "", at: -Infinity };
+  if (SPEAKS.includes(state) && !(spoke.state === state && now - spoke.at < REPEAT_GAP)) {
+    sprout.say(sprout.line, true, SPEAK_FOR, showText ? text : null);
+    spoke = { state, at: now };
+  }
   sendBox();
 });
 

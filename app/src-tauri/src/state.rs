@@ -16,6 +16,9 @@ const SETTLE: f64 = 0.2;
 // Claude Code's own bookkeeping tools, not work the user cares about.
 const IGNORED_TOOLS: [&str; 2] = ["mcp__ccd_turn__wrap_up", "mcp__ccd_turn__update_plan"];
 
+// The snippet in Sprout's bubble: the first line of the message, at most this many characters.
+const SNIPPET: usize = 100;
+
 // Claude Code starts a turn by itself when a background task ends (Phase 0 test 18).
 const SELF_STARTED: &str = "<task-notification>";
 
@@ -44,6 +47,8 @@ pub struct Event {
     sent: Option<f64>,
     // The session's Claude process, to notice a session that died without SessionEnd.
     pid: Option<u32>,
+    // How the turn ended, in words: the last reply (Stop) or the error (StopFailure).
+    text: Option<String>,
     kind: Kind,
 }
 
@@ -107,12 +112,18 @@ pub fn translate(src: &str, msg: &Value) -> Option<Event> {
                 "SessionEnd" => Kind::SessionEnd,
                 _ => return None,
             };
+            let said = match kind {
+                Kind::TurnEnd(End::Answer) => text("last_assistant_message"),
+                Kind::TurnEnd(End::Error) => text("error"),
+                _ => None,
+            };
             Some(Event {
                 session: text("session_id")?.to_string(),
                 prompt: text("prompt_id").map(str::to_string),
                 agent,
                 sent: None,
                 pid: None,
+                text: said.and_then(snippet),
                 kind,
             })
         }
@@ -132,6 +143,7 @@ pub fn translate(src: &str, msg: &Value) -> Option<Event> {
                 agent: None,
                 sent: msg.get("ts").and_then(Value::as_f64),
                 pid: None,
+                text: None,
                 kind: Kind::TurnEnd(end),
             })
         }
@@ -167,6 +179,8 @@ struct Session {
     subagent_asks: Vec<Ask>,
     outcome: Outcome,
     ended_at: f64,
+    // The snippet of how the last turn ended.
+    text: Option<String>,
 }
 
 #[derive(Clone, Copy, Default, PartialEq)]
@@ -223,6 +237,7 @@ impl Machine {
                 s.self_started = false;
                 s.asks.clear();
                 s.outcome = Outcome::None;
+                s.text = None;
             }
         }
         // The hook's time is whole seconds, rounded down, so a mod message from the
@@ -231,6 +246,10 @@ impl Machine {
             && event.sent.is_some_and(|sent| sent < s.prompt_sent)
         {
             return;
+        }
+        // Kept even when the turn already ended: the mod's "turn.complete" can come before Stop.
+        if event.text.is_some() {
+            s.text = event.text;
         }
 
         if !s.running {
@@ -291,6 +310,17 @@ impl Machine {
             .unwrap_or_default()
     }
 
+    // What Sprout's bubble says under the state line: from the session that decides
+    // the state, what it asks (needs you) or how its turn ended (done, error).
+    pub fn text(&self, now: f64) -> Option<String> {
+        let s = self.sessions.values().max_by_key(|s| s.state(now))?;
+        match s.state(now) {
+            State::NeedsYou => s.subagent_asks.iter().chain(&s.asks).last().map(Ask::text),
+            State::Done | State::Error => s.text.clone(),
+            _ => None,
+        }
+    }
+
     // The next time the state changes by itself ("Done" showing, then hiding).
     pub fn next_change(&self, now: f64) -> Option<f64> {
         self.sessions
@@ -326,6 +356,32 @@ impl Session {
             _ => State::Hidden,
         }
     }
+}
+
+impl Ask {
+    // A question shows itself; any other tool shows its name ("mcp__server__tool" as "tool").
+    fn text(&self) -> String {
+        let input: Value = serde_json::from_str(&self.input).unwrap_or_default();
+        let question = input["questions"][0]["question"].as_str();
+        match question.and_then(snippet) {
+            Some(q) if self.tool == "AskUserQuestion" => q,
+            _ => format!("Wants to use {}", self.tool.rsplit("__").next().unwrap_or(&self.tool)),
+        }
+    }
+}
+
+// The first line with words in it, without Markdown marks, cut to SNIPPET characters.
+fn snippet(message: &str) -> Option<String> {
+    let line = message
+        .lines()
+        .map(|l| l.trim().trim_start_matches(['#', '>', '-', '*', ' ']))
+        .find(|l| l.chars().any(char::is_alphanumeric))?;
+    let line: String = line.chars().filter(|c| !matches!(c, '*' | '`' | '_')).collect();
+    let line = line.split_whitespace().collect::<Vec<_>>().join(" ");
+    Some(match line.char_indices().nth(SNIPPET) {
+        Some((cut, _)) => format!("{}…", line[..cut].trim_end()),
+        None => line,
+    })
 }
 
 fn remember(list: &mut VecDeque<String>, item: String) {
@@ -545,6 +601,56 @@ mod tests {
         assert_eq!(m.state(2.0), State::NeedsYou);
         feed(&mut m, "hook", hook("SessionEnd", "b", "pb"), 3.0);
         assert_eq!(m.state(3.0), State::Done);
+    }
+
+    #[test]
+    fn the_bubble_shows_the_first_line_of_the_last_reply() {
+        let mut m = Machine::default();
+        let mut stop = hook("Stop", "s1", "p1");
+        stop["last_assistant_message"] = json!("\n## **Fixed** the `bubble`.\n\nMore below.");
+        feed(&mut m, "hook", hook("UserPromptSubmit", "s1", "p1"), 0.0);
+        feed(&mut m, "hook", stop, 0.0);
+        assert_eq!(m.state(1.0), State::Done);
+        assert_eq!(m.text(1.0).as_deref(), Some("Fixed the bubble."));
+        // The next turn starts without it.
+        feed(&mut m, "hook", hook("UserPromptSubmit", "s1", "p2"), 0.0);
+        assert_eq!(m.text(1.0), None);
+    }
+
+    #[test]
+    fn the_reply_counts_when_the_mod_ended_the_turn_first() {
+        let mut m = Machine::default();
+        feed(&mut m, "hook", hook("UserPromptSubmit", "s1", "p1"), 0.0);
+        let done = json!({ "kind": "turn.complete", "session": "s1", "reason": "answer" });
+        feed(&mut m, "mod", done, 0.0);
+        let mut stop = hook("Stop", "s1", "p1");
+        stop["last_assistant_message"] = json!("All set.");
+        feed(&mut m, "hook", stop, 0.0);
+        assert_eq!(m.text(1.0).as_deref(), Some("All set."));
+    }
+
+    #[test]
+    fn needs_you_shows_the_question_or_the_tool() {
+        let mut m = Machine::default();
+        let mut ask = hook("PermissionRequest", "s1", "p1");
+        ask["tool_name"] = json!("mcp__Claude_Browser__navigate");
+        feed(&mut m, "hook", hook("UserPromptSubmit", "s1", "p1"), 0.0);
+        feed(&mut m, "hook", ask, 0.0);
+        assert_eq!(m.text(0.0).as_deref(), Some("Wants to use navigate"));
+        let mut question = hook("PermissionRequest", "s1", "p1");
+        question["tool_name"] = json!("AskUserQuestion");
+        question["tool_input"] = json!({ "questions": [{ "question": "Which wording?" }] });
+        feed(&mut m, "hook", question, 0.0);
+        assert_eq!(m.text(0.0).as_deref(), Some("Which wording?"));
+    }
+
+    #[test]
+    fn long_snippets_are_cut() {
+        let long = "word ".repeat(40);
+        let cut = snippet(&long).unwrap();
+        assert_eq!(cut.chars().count(), SNIPPET); // 99 characters and the "…"
+        assert!(cut.ends_with("word…"));
+        assert_eq!(snippet("```\n---\n"), None);
     }
 
     #[test]

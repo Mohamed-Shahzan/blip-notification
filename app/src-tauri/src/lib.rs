@@ -220,7 +220,8 @@ fn update_state(app: &AppHandle, event: Option<state::Event>) {
         if let Some(thread) = CURSOR_THREAD.get() {
             thread.unpark();
         }
-        let _ = app.emit("blip-state", state);
+        let text = machine.text(now);
+        let _ = app.emit("blip-state", serde_json::json!({ "state": state, "text": text }));
     }
 }
 
