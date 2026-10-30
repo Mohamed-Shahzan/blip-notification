@@ -159,11 +159,14 @@
   .video { display: block; width: 100%; aspect-ratio: 16 / 9; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); }
   /* Thumbnail: the title card with a play button; clicking anywhere on it starts the video with its controls */
   .player { position: relative; margin-bottom: var(--space-3); }
-  .play { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center; padding: 0 0 12%; background: none; border: 0; border-radius: var(--radius-lg); cursor: pointer; }
-  .play-pill { display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-5); border-radius: 999px; background: var(--ink); color: var(--bg); font: var(--weight-strong) var(--size-sm) var(--font-body); transition: transform var(--fast) var(--ease); }
-  .play-icon { width: 0; height: 0; border-style: solid; border-width: 6px 0 6px 10px; border-color: transparent transparent transparent var(--bg); }
-  @media (hover: hover) { .play:hover .play-pill { transform: scale(1.05); } }
-  .play:active .play-pill { transform: scale(.97); }
+  /* A dark veil over the thumbnail and a big round play button in the middle, so it reads as a video */
+  .play { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-3); padding: 0; background: color-mix(in srgb, var(--bg) 55%, transparent); border: 0; border-radius: var(--radius-lg); color: var(--ink); cursor: pointer; transition: background var(--fast) var(--ease); }
+  .play-circle { display: grid; place-items: center; width: 80px; height: 80px; border-radius: 50%; background: var(--ink); box-shadow: 0 var(--space-2) var(--space-6) color-mix(in srgb, var(--bg) 60%, transparent); transition: transform var(--fast) var(--ease); }
+  .play-icon { width: 0; height: 0; margin-left: var(--space-1); border-style: solid; border-width: 12px 0 12px 20px; border-color: transparent transparent transparent var(--bg); }
+  .play-label { font: var(--weight-strong) var(--size-sm) var(--font-body); }
+  @media (hover: hover) { .play:hover { background: color-mix(in srgb, var(--bg) 40%, transparent); } .play:hover .play-circle { transform: scale(1.08); } }
+  .play:active .play-circle { transform: scale(.96); }
+  @media (max-width: 720px) { .play-circle { width: 56px; height: 56px; } .play-icon { border-width: 9px 0 9px 15px; } }
   .player.playing .play { display: none; }
 
   /* State card: a button, so a click or Enter pokes its Sprout */
@@ -248,12 +251,12 @@
   <section class="block" id="video">
     <h2 class="t-h2">In under a minute</h2>
     <div class="player">
-      <video class="video" preload="metadata" playsinline poster="video/blip-poster.jpg" aria-label="Blip demo, with and without Blip">
+      <video class="video" preload="metadata" playsinline poster="video/blip-poster.jpg" aria-label="Blip demo, with and without Blip" title="Blip demo. Voice: elevenlabs.io">
         <source src="video/blip-demo.mp4" type="video/mp4">
       </video>
-      <button class="play" type="button"><span class="play-pill"><span class="play-icon" aria-hidden="true"></span>Play the demo · 53 s</span></button>
+      <button class="play" type="button"><span class="play-circle" aria-hidden="true"><span class="play-icon"></span></span><span class="play-label">Play the demo · 53 s</span></button>
     </div>
-    <p class="t-small">With and without Blip. Voice by elevenlabs.io, music "Upbeat" by hitslab on Pixabay.</p>
+    <p class="t-small">With and without Blip.</p>
   </section>
 
   <section class="block">
