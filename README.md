@@ -4,9 +4,9 @@
 
 ### 👉 [See it in action: try Sprout live in your browser](https://mohamed-shahzan.github.io/blip-notification/)
 
-[![Watch the 53-second demo](docs/video/blip-poster.jpg)](https://mohamed-shahzan.github.io/blip-notification/#video)
+[![Sprout at the top of the screen: working, then needs you, then done](docs/video/blip-loop.gif)](https://mohamed-shahzan.github.io/blip-notification/#video)
 
-*Watch the 53-second demo, with and without Blip. Voice by elevenlabs.io, music "Upbeat" by hitslab on Pixabay.*
+*[Watch the full 53-second demo with sound](https://mohamed-shahzan.github.io/blip-notification/#video). Voice by elevenlabs.io, music "Upbeat" by hitslab on Pixabay.*
 
 A small animated character, Sprout, that sits at the top centre of your screen and tells you when Claude Code is done, needs you, or hit an error. You can look away while Claude works and Sprout calls you back.
 

@@ -156,7 +156,15 @@
   .t-h2 { font: var(--weight-display) var(--size-xl)/var(--leading-tight) var(--font-display); margin: 0 0 var(--space-5); }
 
   /* Video frame */
-  .video { display: block; width: 100%; aspect-ratio: 16 / 9; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); margin-bottom: var(--space-3); }
+  .video { display: block; width: 100%; aspect-ratio: 16 / 9; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); }
+  /* Thumbnail: the title card with a play button; clicking anywhere on it starts the video with its controls */
+  .player { position: relative; margin-bottom: var(--space-3); }
+  .play { position: absolute; inset: 0; display: flex; align-items: flex-end; justify-content: center; padding: 0 0 12%; background: none; border: 0; border-radius: var(--radius-lg); cursor: pointer; }
+  .play-pill { display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-5); border-radius: 999px; background: var(--ink); color: var(--bg); font: var(--weight-strong) var(--size-sm) var(--font-body); transition: transform var(--fast) var(--ease); }
+  .play-icon { width: 0; height: 0; border-style: solid; border-width: 6px 0 6px 10px; border-color: transparent transparent transparent var(--bg); }
+  @media (hover: hover) { .play:hover .play-pill { transform: scale(1.05); } }
+  .play:active .play-pill { transform: scale(.97); }
+  .player.playing .play { display: none; }
 
   /* State card: a button, so a click or Enter pokes its Sprout */
   .states { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); margin-bottom: var(--space-5); }
@@ -239,9 +247,12 @@
 
   <section class="block" id="video">
     <h2 class="t-h2">In under a minute</h2>
-    <video class="video" controls preload="metadata" playsinline poster="video/blip-poster.jpg" aria-label="Blip demo, with and without Blip">
-      <source src="video/blip-demo.mp4" type="video/mp4">
-    </video>
+    <div class="player">
+      <video class="video" preload="metadata" playsinline poster="video/blip-poster.jpg" aria-label="Blip demo, with and without Blip">
+        <source src="video/blip-demo.mp4" type="video/mp4">
+      </video>
+      <button class="play" type="button"><span class="play-pill"><span class="play-icon" aria-hidden="true"></span>Play the demo · 53 s</span></button>
+    </div>
     <p class="t-small">With and without Blip. Voice by elevenlabs.io, music "Upbeat" by hitslab on Pixabay.</p>
   </section>
 
@@ -483,6 +494,22 @@
     d.classList.add('closing');
     setTimeout(() => { d.open = false; d.classList.remove('closing'); }, fast);
   }));
+})();
+
+// Demo video: the thumbnail's button starts it with controls; when it ends the thumbnail comes back.
+(function () {
+  const player = document.querySelector('.player'), video = player.querySelector('video'), btn = player.querySelector('.play');
+  btn.addEventListener('click', () => {
+    player.classList.add('playing');
+    video.controls = true;
+    video.play();
+    video.focus();
+  });
+  video.addEventListener('ended', () => {
+    player.classList.remove('playing');
+    video.controls = false;
+    video.load(); // shows the poster again
+  });
 })();
 </script>
 </body>

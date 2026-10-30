@@ -32,4 +32,5 @@ docs/*
 docs/video/*
 !docs/video/blip-demo.mp4
 !docs/video/blip-poster.jpg
+!docs/video/blip-loop.gif
 !docs/.nojekyll
