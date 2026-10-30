@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Blip</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 28'%3E%3Cpath d='M12 4v5' stroke='%23a8a196' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='3.5' r='2.5' fill='%234f8cff'/%3E%3Crect x='2' y='9' width='20' height='17' rx='7' fill='%23f2eee7'/%3E%3Ccircle cx='8.5' cy='17' r='1.7' fill='%2315130f'/%3E%3Ccircle cx='15.5' cy='17' r='1.7' fill='%2315130f'/%3E%3C/svg%3E">
 <meta name="description" content="Sprout sits at the top of your screen and tells you when Claude Code needs you.">
 <meta property="og:title" content="Blip">
 <meta property="og:description" content="Sprout sits at the top of your screen and tells you when Claude Code needs you.">
@@ -79,7 +80,7 @@
   body { position: relative; overflow-x: clip; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: var(--weight-body) var(--size-md)/var(--leading-body) var(--font-body); }
   .page { max-width: var(--page); margin: 0 auto; padding: 0 var(--space-4); }
-  p { margin: 0 0 var(--space-4); max-width: var(--measure); }
+  p { margin: 0 0 var(--space-4); max-width: var(--measure); text-wrap: pretty; }
   code { font-family: var(--font-mono); font-size: .9em; }
   :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 
@@ -97,14 +98,22 @@
 
   /* Hero */
   .top { padding: var(--space-5) 0; }
-  .wordmark { font: var(--weight-display) var(--size-lg)/1 var(--font-display); color: var(--ink); text-decoration: none; }
+  .wordmark { display: inline-flex; align-items: center; gap: var(--space-2); font: var(--weight-display) var(--size-lg)/1 var(--font-display); color: var(--ink); text-decoration: none; }
+  .mark { width: 22px; height: 26px; }
   .hero { padding: var(--space-8) 0; text-align: center; }
   .hero p { margin-left: auto; margin-right: auto; }
   .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-3); margin: var(--space-5) 0 var(--space-7); }
 
   /* Screen frame: the hero demo */
   .screen { background: var(--sunken); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; text-align: left; }
-  .menubar { height: 28px; background: var(--raised); }
+  .menubar { height: 28px; background: var(--raised); display: flex; justify-content: flex-end; align-items: center; padding: 0 var(--space-2); }
+  /* Wi-Fi switch: on is ink, off is line. The knob slides */
+  .wifi { display: inline-flex; align-items: center; gap: var(--space-2); background: none; border: 0; border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); color: var(--ink); font: var(--size-xs) var(--font-mono); cursor: pointer; }
+  .knob { position: relative; width: 24px; height: 14px; border-radius: 7px; background: var(--ink); transition: background var(--fast) var(--ease); }
+  .knob::after { content: ""; position: absolute; top: 2px; left: 12px; width: 10px; height: 10px; border-radius: 50%; background: var(--bg); transition: left var(--fast) var(--ease); }
+  .wifi[aria-checked="false"] { color: var(--muted); }
+  .wifi[aria-checked="false"] .knob { background: var(--line); }
+  .wifi[aria-checked="false"] .knob::after { left: 2px; }
   .screen-top { display: flex; justify-content: center; height: 124px; }
   /* Sprout's canvas sits in a button so the keyboard can poke it. The canvas is 112 x 142 (canvasSize(56)), its top hidden under the menu bar's edge. */
   .poke { padding: 0; margin-top: -6px; border: 0; background: none; border-radius: var(--radius-sm); cursor: pointer; height: 142px; }
@@ -137,24 +146,21 @@
   @media (prefers-reduced-motion: reduce) { .msg, .events li { animation: none; } }
 
   /* Sections */
-  .block { padding: var(--space-9) 0; border-top: 1px solid var(--line); }
+  .block { padding: var(--space-9) 0; }
   .t-h2 { font: var(--weight-display) var(--size-xl)/var(--leading-tight) var(--font-display); margin: 0 0 var(--space-5); }
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-7); align-items: start; }
 
   /* State card: a button, so a click or Enter pokes its Sprout */
-  .states { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3); margin-bottom: var(--space-4); }
+  .states { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); margin-bottom: var(--space-5); }
   .card { display: flex; flex-direction: column; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-5); font: var(--size-sm)/var(--leading-body) var(--font-body); color: var(--muted); text-align: left; cursor: pointer; }
-  .card canvas { display: block; width: 80px; height: 102px; margin: calc(-1 * var(--space-5)) 0 0 calc(-1 * var(--space-3)); }
-  .card b { display: block; color: var(--ink); margin: var(--space-3) 0 var(--space-1); }
+  /* The canvas keeps room above Sprout for its hops; pull it up and left so the body lines up with the text */
+  .card canvas { display: block; width: 80px; height: 102px; margin: calc(-1 * var(--space-5)) 0 0 calc(-1 * var(--space-4)); }
+  .card b { display: block; color: var(--ink); margin: var(--space-4) 0 var(--space-1); }
 
-  /* Steps: How it works. A numbered circle per step, joined by a thin line */
-  .steps { list-style: none; margin: 0 0 var(--space-5); padding: 0; counter-reset: step; }
-  .steps li { position: relative; padding: 0 0 var(--space-5) var(--space-7); counter-increment: step; color: var(--muted); font-size: var(--size-sm); }
-  .steps li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--ink); font: var(--size-xs) var(--font-mono); }
-  .steps li:not(:last-child)::after { content: ""; position: absolute; left: 14px; top: 32px; bottom: var(--space-1); width: 1px; background: var(--line); }
-  .steps b { display: block; color: var(--ink); font-size: var(--size-md); }
-  .proof { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-3) var(--space-4); font-size: var(--size-sm); color: var(--muted); }
-  .proof b { color: var(--ink); }
+  /* Facts: It stays out of Claude's way. Each fact has its proof under it */
+  .facts { display: grid; gap: var(--space-3); }
+  .fact { margin: 0; max-width: none; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-5); font-size: var(--size-sm); color: var(--muted); }
+  .fact b { display: block; color: var(--ink); font-size: var(--size-md); margin-bottom: var(--space-1); }
 
   /* Question */
   details { border-bottom: 1px solid var(--line); padding: var(--space-4) 0; }
@@ -176,17 +182,17 @@
 </head>
 <body>
 <main class="page">
-  <header class="top"><a class="wordmark" href="#">Blip</a></header>
+  <header class="top"><a class="wordmark" href="#"><svg class="mark" viewBox="0 0 24 28" aria-hidden="true"><path d="M12 4v5" stroke="var(--muted)" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="3.5" r="2.5" fill="var(--working)"/><rect x="2" y="9" width="20" height="17" rx="7" fill="var(--ink)"/><circle cx="8.5" cy="17" r="1.7" fill="var(--bg)"/><circle cx="15.5" cy="17" r="1.7" fill="var(--bg)"/></svg>Blip</a></header>
   <section class="hero">
     <h1 class="t-hero">Sprout watches Claude Code so you don't have to.</h1>
     <p class="t-lead">It sits at the top of your screen. When Claude needs you, it puts its hand up. That's most of it.</p>
     <div class="actions">
       <a class="btn main" href="https://github.com/Mohamed-Shahzan/blip-notification">GitHub</a>
     </div>
-    <p class="t-small">This is your playground. Try Sprout here.</p>
+    <p class="t-small">This is your playground. Press Allow or Deny, or turn the Wi-Fi off.</p>
 
     <div class="screen" id="demo">
-      <div class="menubar"></div>
+      <div class="menubar"><button class="wifi" id="wifi" type="button" role="switch" aria-checked="true">Wi-Fi<span class="knob" aria-hidden="true"></span></button></div>
       <div class="screen-top">
         <button class="poke" id="poke" type="button" aria-label="Poke Sprout" tabindex="-1"><canvas id="sprout" aria-hidden="true"></canvas></button>
       </div>
@@ -216,22 +222,17 @@
 
   <section class="block two">
     <div>
-      <h2 class="t-h2">How it works</h2>
-      <p>Claude Code can run a small command at each step of its work. Blip adds one that tells Sprout what just happened.</p>
+      <h2 class="t-h2">It stays out of Claude's way</h2>
+      <p>Blip adds a small command that Claude Code runs at each step of its work. That's how Sprout knows what's going on.</p>
     </div>
-    <div>
-      <ol class="steps">
-        <li><b>Claude Code</b>asks for permission or finishes a task.</li>
-        <li><b>A small command</b>sends one line to Blip. It gives up after 2 seconds, and Claude never waits for it.</li>
-        <li><b>Blip</b>gets it on your own computer. Nothing goes online.</li>
-        <li><b>Sprout</b>shows it at the top of your screen.</li>
-      </ol>
-      <p class="proof"><b>Tested.</b> I froze Blip on purpose, on a Mac and on Windows, and Claude didn't notice.</p>
+    <div class="facts">
+      <p class="fact"><b>Claude never waits for it.</b>The command gives up after 2 seconds. I froze Blip on purpose, on a Mac and on Windows, and Claude didn't notice.</p>
+      <p class="fact"><b>Nothing leaves your computer.</b>Blip only listens on your own machine, never on the internet.</p>
     </div>
   </section>
 
   <section class="block">
-    <h2 class="t-h2">Questions</h2>
+    <h2 class="t-h2">You might be wondering</h2>
     <details open><summary>Does it slow Claude down?</summary><p>No. I tested it with Blip frozen and with Blip quit. Claude carried on both times.</p></details>
     <details><summary>Does it send my code anywhere?</summary><p>No. Everything stays on your computer.</p></details>
     <details><summary>Windows?</summary><p>It runs there, but Sprout isn't on Windows yet. Next on my list.</p></details>
@@ -250,8 +251,8 @@
 <script>
 (function () {
   // Timings for the fake chat, in ms.
-  const READ_MS = 2500, TESTS_MS = 2000, DONE_MS = 2500, DENY_MS = 1200, AWAKE_MS = 4500;
-  const NAMES = { working: 'Working', needs: 'Needs you', done: 'Done' };
+  const READ_MS = 2500, TESTS_MS = 2000, DONE_MS = 2500, DENY_MS = 1200, AWAKE_MS = 4500, LINGER_MS = 4000;
+  const NAMES = { working: 'Working', needs: 'Needs you', done: 'Done', error: 'Error' };
   const WAKE_LINE = 'Nothing to do right now. Press Try again.';
   // Resting colours the done state grey (the muted token), so the hanging bulb reads "nothing going on", not Done.
   const GREY = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
@@ -264,6 +265,11 @@
   const sprout = BlipSprout.create(document.getElementById('sprout'), { size: 56, handlePress: false, compactTop: 6 });
   let timers = [], started = false, keyboard = false; // keyboard: "Try again" was pressed with a key, so Allow gets focus next
   let resting = false, awakeTimer = 0;
+  // phase: what Claude is doing. Turning the Wi-Fi off only breaks things while Claude is working;
+  // while it waits for Allow or Deny nothing goes over the network yet.
+  let phase = 'end', errored = false, wifiBroke = false, askButtons = []; // wifiBroke: this run ended because the Wi-Fi went off
+  const wifi = document.getElementById('wifi');
+  const wifiOn = () => wifi.getAttribute('aria-checked') === 'true';
 
   const later = (ms, fn) => timers.push(setTimeout(fn, ms));
 
@@ -295,18 +301,34 @@
   // Where the app hides Sprout, the site keeps the antenna hanging (Sprout's compact form) so there is still
   // something to click. Resting uses the done face, coloured grey; after a Deny it comes in quietly (no egg),
   // since the visitor said no and there was no Done.
-  function rest(why) {
+  // linger: a line Sprout says first, staying out for a few seconds before it goes into the bulb (after a Deny).
+  function rest(why, linger) {
     resting = true;
     sprout.update({ colors: { done: GREY } });
-    sprout.setCompact(true);
     if (sprout.state !== 'done') { sprout.update({ eggs: false }); sprout.setState('done'); sprout.update({ eggs: true }); }
+    clearTimeout(awakeTimer);
+    if (linger) { sprout.say(linger, true, LINGER_MS - 300); awakeTimer = setTimeout(() => sprout.setCompact(true), LINGER_MS); }
+    else sprout.setCompact(true);
     pokeBtn.setAttribute('aria-label', 'Wake Sprout');
     logRow('Resting', why, 'muted');
+  }
+
+  // Wi-Fi off while Claude works: Claude stops with an error and Sprout stays red until someone looks.
+  function fail() {
+    timers.forEach(clearTimeout); timers = [];
+    phase = 'end'; errored = true; wifiBroke = true;
+    askButtons.forEach(b => { b.disabled = true; });
+    msg('Connection lost. Couldn\'t reach the server.');
+    state('error', 'Claude stopped with an error');
+    pokeBtn.setAttribute('aria-label', 'Look at Sprout');
+    again();
   }
 
   // A press: wakes a resting Sprout (it comes out and says there is nothing to do), otherwise a normal poke.
   // Awake, it goes back into its bulb after a few quiet seconds; every press restarts that wait.
   function press() {
+    // Clicking a red Sprout is "going to look": it calms down and rests.
+    if (errored) { errored = false; rest('You went and looked'); return; }
     if (resting) {
       clearTimeout(awakeTimer);
       awakeTimer = setTimeout(() => sprout.setCompact(true), AWAKE_MS);
@@ -318,19 +340,23 @@
   function play() {
     timers.forEach(clearTimeout); timers = [];
     chat.textContent = ''; events.textContent = '';
-    clearTimeout(awakeTimer); resting = false;
+    clearTimeout(awakeTimer); resting = false; errored = false; wifiBroke = false;
+    wifi.setAttribute('aria-checked', 'true');
     sprout.update({ colors: { done: GREEN } });
     sprout.setCompact(false);
     pokeBtn.setAttribute('aria-label', 'Poke Sprout');
     msg('Rename the old date helpers and run the tests.', true);
     msg('Reading 14 files…');
     state('working', 'You sent a prompt');
+    phase = 'working';
     later(READ_MS, ask);
   }
 
   function ask() {
     const el = msg('Can I run <code>npm test</code>?<div class="ask"><button class="btn main" type="button">Allow</button><button class="btn" type="button">Deny</button></div>');
     const [allow, deny] = el.querySelectorAll('button');
+    askButtons = [allow, deny];
+    phase = 'needs';
     state('needs', 'Claude asked to run a command');
     allow.onclick = () => answer(true, allow, deny);
     deny.onclick = () => answer(false, allow, deny);
@@ -342,11 +368,14 @@
     allow.disabled = deny.disabled = true;
     (ok ? allow : deny).classList.add('main');
     (ok ? deny : allow).classList.remove('main');
+    if (ok && !wifiOn()) { fail(); return; }
+    phase = ok ? 'working' : 'end';
     if (ok) {
       msg('Running tests…');
       state('working', 'You allowed it');
       later(TESTS_MS, () => {
         msg('All 32 tests pass.');
+        phase = 'end';
         state('done', 'Claude finished');
         later(DONE_MS, () => { rest('In the app Sprout hides. Here it waits for a click.'); again(); });
       });
@@ -354,7 +383,7 @@
       // Like the real app: no hook fires after a Deny, so Sprout stays on Needs you until Claude's reply ends the turn.
       later(DENY_MS, () => {
         msg('Okay, I won\'t run them.');
-        rest('You said no, so no Done. Here it waits for a click.');
+        rest('You said no, so no Done. Here it waits for a click.', 'Okay, skipping the tests.');
         again();
       });
     }
@@ -371,6 +400,14 @@
 
   // Mouse, touch, Enter and Space all arrive as a click on the button.
   pokeBtn.addEventListener('click', press);
+
+  // The Wi-Fi switch: off while Claude works makes it fail; back on after that starts over.
+  wifi.addEventListener('click', () => {
+    const on = !wifiOn();
+    wifi.setAttribute('aria-checked', String(on));
+    if (!on && phase === 'working') fail();
+    else if (on && wifiBroke) play();
+  });
 
   // Start when the screen is in view, so the story doesn't play unseen.
   new IntersectionObserver((entries, io) => {
