@@ -4,6 +4,10 @@
 
 ### 👉 [See it in action: try Sprout live in your browser](https://mohamed-shahzan.github.io/blip-notification/)
 
+[![Watch the 53-second demo](docs/video/blip-poster.jpg)](https://mohamed-shahzan.github.io/blip-notification/#video)
+
+*Watch the 53-second demo, with and without Blip. Voice by elevenlabs.io, music "Upbeat" by hitslab on Pixabay.*
+
 A small animated character, Sprout, that sits at the top centre of your screen and tells you when Claude Code is done, needs you, or hit an error. You can look away while Claude works and Sprout calls you back.
 
 **Status: early preview, Mac only.** Everything below works on the Mac today. Windows support, sounds and a one-click app download are coming next.

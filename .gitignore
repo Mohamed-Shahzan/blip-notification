@@ -28,4 +28,8 @@ hooks/experiments/
 docs/*
 !docs/index.html
 !docs/sprout.js
+!docs/video/
+docs/video/*
+!docs/video/blip-demo.mp4
+!docs/video/blip-poster.jpg
 !docs/.nojekyll

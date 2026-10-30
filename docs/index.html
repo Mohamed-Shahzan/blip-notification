@@ -155,6 +155,9 @@
   .block { padding: var(--space-9) 0; }
   .t-h2 { font: var(--weight-display) var(--size-xl)/var(--leading-tight) var(--font-display); margin: 0 0 var(--space-5); }
 
+  /* Video frame */
+  .video { display: block; width: 100%; aspect-ratio: 16 / 9; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); margin-bottom: var(--space-3); }
+
   /* State card: a button, so a click or Enter pokes its Sprout */
   .states { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); margin-bottom: var(--space-5); }
   .card { display: flex; flex-direction: column; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-5); font: var(--size-sm)/var(--leading-body) var(--font-body); color: var(--muted); text-align: left; cursor: pointer; }
@@ -210,6 +213,7 @@
     <p class="t-lead">A little lookout at the top of your screen. When Claude needs you, it puts its hand up.</p>
     <div class="actions">
       <a class="btn main" href="https://github.com/Mohamed-Shahzan/blip-notification">GitHub</a>
+      <a class="btn" href="#video">Watch the video</a>
     </div>
     <p class="meta"><span>Free</span> · <span>Open source (MIT)</span></p>
     <p class="t-small">This is your playground. Press Allow or Deny, or turn the Wi-Fi off.</p>
@@ -231,6 +235,14 @@
         </div>
       </div>
     </div>
+  </section>
+
+  <section class="block" id="video">
+    <h2 class="t-h2">In under a minute</h2>
+    <video class="video" controls preload="metadata" playsinline poster="video/blip-poster.jpg" aria-label="Blip demo, with and without Blip">
+      <source src="video/blip-demo.mp4" type="video/mp4">
+    </video>
+    <p class="t-small">With and without Blip. Voice by elevenlabs.io, music "Upbeat" by hitslab on Pixabay.</p>
   </section>
 
   <section class="block">
