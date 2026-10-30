@@ -117,7 +117,10 @@
   .wifi[aria-checked="false"] { color: var(--muted); }
   .wifi[aria-checked="false"] .knob { background: var(--line); }
   .wifi[aria-checked="false"] .knob::after { left: 2px; }
-  .screen-top { display: flex; justify-content: center; height: 124px; }
+  .screen-top { position: relative; display: flex; justify-content: center; height: 124px; }
+  /* Shown beside the resting bulb until the visitor has clicked it once, so the bulb doesn't look like a glitch */
+  .bulb-hint { position: absolute; top: var(--space-3); left: calc(50% + var(--space-5)); font: var(--size-xs) var(--font-mono); color: var(--muted); opacity: 0; transition: opacity var(--fast) var(--ease); pointer-events: none; }
+  .bulb-hint.on { opacity: 1; }
   /* Sprout's canvas sits in a button so the keyboard can poke it. The canvas is 112 x 142 (canvasSize(56)), its top hidden under the menu bar's edge. */
   .poke { padding: 0; margin-top: -6px; border: 0; background: none; border-radius: var(--radius-sm); cursor: pointer; height: 142px; }
   .poke canvas { display: block; width: 112px; height: 142px; }
@@ -164,6 +167,8 @@
   details { border-bottom: 1px solid var(--line); padding: var(--space-4) 0; }
   summary { font-weight: var(--weight-strong); cursor: pointer; }
   details p { color: var(--muted); margin: var(--space-2) 0 0; }
+  details code { display: block; margin: var(--space-2) 0; padding: var(--space-2) var(--space-3); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--ink); overflow-wrap: anywhere; }
+  details a { color: var(--ink); }
 
   /* Footer */
   .footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-6) 0 var(--space-7); border-top: 1px solid var(--line); font-size: var(--size-sm); color: var(--muted); }
@@ -182,7 +187,7 @@
   <header class="top"><a class="wordmark" href="#"><svg class="mark" viewBox="0 0 24 28" aria-hidden="true"><path d="M12 4v5" stroke="var(--muted)" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="3.5" r="2.5" fill="var(--working)"/><rect x="2" y="9" width="20" height="17" rx="7" fill="var(--ink)"/><circle cx="8.5" cy="17" r="1.7" fill="var(--bg)"/><circle cx="15.5" cy="17" r="1.7" fill="var(--bg)"/></svg>Blip</a></header>
   <section class="hero">
     <h1 class="t-hero">Sprout watches Claude Code so you don't have to.</h1>
-    <p class="t-lead">It sits at the top of your screen. When Claude needs you, it puts its hand up. That's most of it.</p>
+    <p class="t-lead">Claude Code often stops to ask before it acts. If you've walked away, it just waits. Blip is a small Mac app whose character, Sprout, sits at the top of your screen and puts its hand up when that happens.</p>
     <div class="actions">
       <a class="btn main" href="https://github.com/Mohamed-Shahzan/blip-notification">GitHub</a>
     </div>
@@ -192,6 +197,7 @@
     <div class="screen" id="demo">
       <div class="menubar"><button class="wifi" id="wifi" type="button" role="switch" aria-checked="true">Wi-Fi<span class="knob" aria-hidden="true"></span></button></div>
       <div class="screen-top">
+        <span class="bulb-hint" id="bulb-hint" aria-hidden="true">← click me</span>
         <button class="poke" id="poke" type="button" aria-label="Poke Sprout" tabindex="-1"><canvas id="sprout" aria-hidden="true"></canvas></button>
       </div>
       <div class="desk">
@@ -222,9 +228,9 @@
     <h2 class="t-h2">You might be wondering</h2>
     <details open><summary>Does it slow Claude down?</summary><p>No. I tested it with Blip frozen and with Blip quit. Claude carried on both times.</p></details>
     <details><summary>Does it send my code anywhere?</summary><p>No. Everything stays on your computer.</p></details>
-    <details><summary>Windows?</summary><p>It runs there, but Sprout isn't on Windows yet. Next on my list.</p></details>
+    <details><summary>Windows?</summary><p>Not yet. Blip is Mac only for now, and Windows is next on my list.</p></details>
     <details><summary>Does it work with Cursor or Codex?</summary><p>With Claude Code, yes, wherever Claude Code runs. So far I've tested it in the Claude app and Terminal on a Mac. Codex and Cursor's own agent aren't supported yet.</p></details>
-    <details><summary>How do I install it?</summary><p>Right now you build it from the code. A proper installer comes later.</p></details>
+    <details><summary>How do I install it?</summary><p>Ask Claude Code to do it. Paste this into Claude Code: <code>Install Blip by following https://github.com/Mohamed-Shahzan/blip-notification/blob/main/INSTALL.md</code> It explains each step and asks before running it. The first time takes about 15 minutes, mostly waiting for the build. The steps by hand are in the <a href="https://github.com/Mohamed-Shahzan/blip-notification#install-mac">README</a>. A one-click download comes later.</p></details>
   </section>
 
   <footer class="footer">
@@ -251,7 +257,10 @@
   // compactTop: the stalk hangs from the menu bar's edge, 6 px below the canvas top (see .poke).
   const sprout = BlipSprout.create(document.getElementById('sprout'), { size: 56, handlePress: false, compactTop: 6 });
   let timers = [], started = false, keyboard = false; // keyboard: "Try again" was pressed with a key, so Allow gets focus next
-  let resting = false, awakeTimer = 0;
+  let resting = false, awakeTimer = 0, woken = false; // woken: the visitor has clicked the resting bulb at least once
+  const hint = document.getElementById('bulb-hint');
+  // Into the bulb; the hint shows beside it until the first click.
+  function tuck() { sprout.setCompact(true); hint.classList.toggle('on', !woken); }
   // phase: what Claude is doing. Turning the Wi-Fi off only breaks things while Claude is working;
   // while it waits for Allow or Deny nothing goes over the network yet.
   let phase = 'end', errored = false, wifiBroke = false, askButtons = []; // wifiBroke: this run ended because the Wi-Fi went off
@@ -294,8 +303,8 @@
     sprout.update({ colors: { done: GREY } });
     if (sprout.state !== 'done') { sprout.update({ eggs: false }); sprout.setState('done'); sprout.update({ eggs: true }); }
     clearTimeout(awakeTimer);
-    if (linger) { sprout.say(linger, true, LINGER_MS - 300); awakeTimer = setTimeout(() => sprout.setCompact(true), LINGER_MS); }
-    else sprout.setCompact(true);
+    if (linger) { sprout.say(linger, true, LINGER_MS - 300); awakeTimer = setTimeout(tuck, LINGER_MS); }
+    else tuck();
     pokeBtn.setAttribute('aria-label', 'Wake Sprout');
     logRow('Resting', why, 'muted');
   }
@@ -318,8 +327,8 @@
     if (errored) { errored = false; rest('You went and looked'); return; }
     if (resting) {
       clearTimeout(awakeTimer);
-      awakeTimer = setTimeout(() => sprout.setCompact(true), AWAKE_MS);
-      if (sprout.compact) { sprout.setCompact(false); sprout.say(WAKE_LINE, true, AWAKE_MS - 500); return; }
+      awakeTimer = setTimeout(tuck, AWAKE_MS);
+      if (sprout.compact) { woken = true; hint.classList.remove('on'); sprout.setCompact(false); sprout.say(WAKE_LINE, true, AWAKE_MS - 500); return; }
     }
     sprout.poke();
   }
@@ -330,7 +339,7 @@
     clearTimeout(awakeTimer); resting = false; errored = false; wifiBroke = false;
     wifi.setAttribute('aria-checked', 'true');
     sprout.update({ colors: { done: GREEN } });
-    sprout.setCompact(false);
+    sprout.setCompact(false); hint.classList.remove('on');
     pokeBtn.setAttribute('aria-label', 'Poke Sprout');
     msg('Rename the old date helpers and run the tests.', true);
     msg('Reading 14 files…');
