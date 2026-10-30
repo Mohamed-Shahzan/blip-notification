@@ -93,7 +93,7 @@ Blip only listens on `127.0.0.1`, so nothing leaves your Mac. Claude's last repl
 
 ## Built with
 
-[Tauri](https://tauri.app) (Rust) for the window and the state logic, plain JavaScript and canvas for Sprout, and Claude Code hooks for the events. Sprout's playground, for trying every state and setting, is in [`character/playground.html`](character/playground.html).
+[Tauri](https://tauri.app) (Rust) for the window and the state logic, plain JavaScript and canvas for Sprout, and Claude Code hooks for the events. Try every state in the [live playground](https://mohamed-shahzan.github.io/blip-notification/).
 
 ## License
 
