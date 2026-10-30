@@ -159,14 +159,15 @@
   .video { display: block; width: 100%; aspect-ratio: 16 / 9; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); }
   /* Thumbnail: the title card with a play button; clicking anywhere on it starts the video with its controls */
   .player { position: relative; margin-bottom: var(--space-3); }
-  /* A dark veil over the thumbnail and a big round play button in the middle, so it reads as a video */
-  .play { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-3); padding: 0; background: color-mix(in srgb, var(--bg) 55%, transparent); border: 0; border-radius: var(--radius-lg); color: var(--ink); cursor: pointer; transition: background var(--fast) var(--ease); }
+  /* A dark veil over the thumbnail and a big round play button, centred in the open space under Sprout and the name */
+  .play { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: var(--space-3); padding: 0 0 12%; background: color-mix(in srgb, var(--bg) 35%, transparent); border: 0; border-radius: var(--radius-lg); color: var(--ink); cursor: pointer; transition: background var(--fast) var(--ease); }
   .play-circle { display: grid; place-items: center; width: 80px; height: 80px; border-radius: 50%; background: var(--ink); box-shadow: 0 var(--space-2) var(--space-6) color-mix(in srgb, var(--bg) 60%, transparent); transition: transform var(--fast) var(--ease); }
   .play-icon { width: 0; height: 0; margin-left: var(--space-1); border-style: solid; border-width: 12px 0 12px 20px; border-color: transparent transparent transparent var(--bg); }
   .play-label { font: var(--weight-strong) var(--size-sm) var(--font-body); }
-  @media (hover: hover) { .play:hover { background: color-mix(in srgb, var(--bg) 40%, transparent); } .play:hover .play-circle { transform: scale(1.08); } }
+  @media (hover: hover) { .play:hover { background: color-mix(in srgb, var(--bg) 15%, transparent); } .play:hover .play-circle { transform: scale(1.08); } }
   .play:active .play-circle { transform: scale(.96); }
-  @media (max-width: 720px) { .play-circle { width: 56px; height: 56px; } .play-icon { border-width: 9px 0 9px 15px; } }
+  /* Phones: the video is short, so a smaller button sits low and the label goes */
+  @media (max-width: 720px) { .play { padding-bottom: 6%; } .play-circle { width: 44px; height: 44px; } .play-icon { border-width: 7px 0 7px 12px; } .play-label { display: none; } }
   .player.playing .play { display: none; }
 
   /* State card: a button, so a click or Enter pokes its Sprout */
@@ -251,10 +252,10 @@
   <section class="block" id="video">
     <h2 class="t-h2">In under a minute</h2>
     <div class="player">
-      <video class="video" preload="metadata" playsinline poster="video/blip-poster.jpg" aria-label="Blip demo, with and without Blip" title="Blip demo. Voice: elevenlabs.io">
+      <video class="video" preload="metadata" playsinline poster="video/blip-thumb.jpg" aria-label="Blip demo, with and without Blip" title="Blip demo. Voice: elevenlabs.io">
         <source src="video/blip-demo.mp4" type="video/mp4">
       </video>
-      <button class="play" type="button"><span class="play-circle" aria-hidden="true"><span class="play-icon"></span></span><span class="play-label">Play the demo · 53 s</span></button>
+      <button class="play" type="button" aria-label="Play the demo, 53 seconds"><span class="play-circle" aria-hidden="true"><span class="play-icon"></span></span><span class="play-label" aria-hidden="true">Play the demo · 53 s</span></button>
     </div>
     <p class="t-small">With and without Blip.</p>
   </section>
