@@ -174,6 +174,26 @@
   .footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-6) 0 var(--space-7); border-top: 1px solid var(--line); font-size: var(--size-sm); color: var(--muted); }
   .footer a { color: var(--ink); }
 
+  /* Micro-interactions: things you can click lift a little on hover and press in when clicked */
+  .btn, .wifi, .again, .card, .footer a, .wordmark, summary { transition: transform var(--fast) var(--ease), background var(--fast) var(--ease), border-color var(--fast) var(--ease); }
+  .footer a, .wordmark { display: inline-flex; }
+  @media (hover: hover) {
+    .btn:not(:disabled):hover, .wifi:hover, .again:hover, .footer a:hover, .wordmark:hover { transform: translateY(-1px); }
+    .card:hover { transform: translateY(-2px); border-color: var(--muted); }
+    summary:hover { transform: translateX(var(--space-1)); }
+  }
+  .btn:not(:disabled):active, .wifi:active, .again:active, .card:active, .footer a:active, .wordmark:active, summary:active { transform: scale(.97); }
+
+  /* Accordion: the answer fades and slides in when it opens, and out before it closes (see script) */
+  details[open] > :not(summary) { animation: reveal var(--fast) var(--ease); }
+  details.closing > :not(summary) { animation: conceal var(--fast) var(--ease) forwards; }
+  @keyframes reveal { from { opacity: 0; transform: translateY(calc(-1 * var(--space-1))); } }
+  @keyframes conceal { to { opacity: 0; transform: translateY(calc(-1 * var(--space-1))); } }
+  @media (prefers-reduced-motion: reduce) {
+    .btn, .wifi, .again, .card, .footer a, .wordmark, summary { transform: none !important; }
+    details > :not(summary) { animation: none !important; }
+  }
+
   @media (max-width: 720px) {
     .hero { padding: var(--space-8) 0; }
     .block { padding: var(--space-8) 0; }
@@ -191,7 +211,7 @@
     <div class="actions">
       <a class="btn main" href="https://github.com/Mohamed-Shahzan/blip-notification">GitHub</a>
     </div>
-    <p class="meta"><span>Free</span> · <span>Open source (MIT)</span> · <span>Never slows Claude</span> · <span>Nothing leaves your computer</span></p>
+    <p class="meta"><span>Free</span> · <span>Open source (MIT)</span></p>
     <p class="t-small">This is your playground. Press Allow or Deny, or turn the Wi-Fi off.</p>
 
     <div class="screen" id="demo">
@@ -221,20 +241,20 @@
       <button class="card" type="button" data-state="done"><canvas aria-hidden="true"></canvas><b>Done</b>Green. One hop, a little star, then it goes away.</button>
       <button class="card" type="button" data-state="error"><canvas aria-hidden="true"></canvas><b>Error</b>Red. It slumps. The bulb flickers until you go and look.</button>
     </div>
-    <p class="t-small">Click Sprout a few times and it'll tell you what's going on. Click it a lot and it gets fed up.</p>
+    <p class="t-small">Click a Sprout a few times. Keep going and it gets fed up.</p>
   </section>
 
   <section class="block">
     <h2 class="t-h2">You might be wondering</h2>
     <details open><summary>Does it slow Claude down?</summary><p>No. I tested it with Blip frozen and with Blip quit. Claude carried on both times.</p></details>
     <details><summary>Does it send my code anywhere?</summary><p>No. Everything stays on your computer.</p></details>
-    <details><summary>Windows?</summary><p>Not yet. Blip is Mac only for now, and Windows is next on my list.</p></details>
+    <details><summary>Does it work on Windows?</summary><p>Not yet. Blip is Mac only for now, and Windows is next on my list.</p></details>
     <details><summary>Does it work with Cursor or Codex?</summary><p>With Claude Code, yes, wherever Claude Code runs. So far I've tested it in the Claude app and Terminal on a Mac. Codex and Cursor's own agent aren't supported yet.</p></details>
     <details><summary>How do I install it?</summary><p>Ask Claude Code to do it. Paste this into Claude Code: <code>Install Blip by following https://github.com/Mohamed-Shahzan/blip-notification/blob/main/INSTALL.md</code> It explains each step and asks before running it. The first time takes about 15 minutes, mostly waiting for the build. The steps by hand are in the <a href="https://github.com/Mohamed-Shahzan/blip-notification#install-mac">README</a>. A one-click download comes later.</p></details>
   </section>
 
   <footer class="footer">
-    <span>Made by Mohamed, a product designer, with Claude Code. MIT licence.</span>
+    <span>Made by Mohamed, a design engineer, with Claude Code. MIT licence.</span>
     <a href="https://github.com/Mohamed-Shahzan/blip-notification">GitHub</a>
   </footer>
 </main>
@@ -439,6 +459,18 @@
       else sprout.setState(card.dataset.state);
     });
   }, { threshold: .1 }).observe(document.querySelector('.states'));
+})();
+
+// Questions: a row closes after its answer has faded out (opening is plain CSS). Instant with Reduce Motion.
+(function () {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+  const fast = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fast')) || 0;
+  document.querySelectorAll('details').forEach(d => d.querySelector('summary').addEventListener('click', e => {
+    if (!d.open || reduce.matches || !fast) return;
+    e.preventDefault();
+    d.classList.add('closing');
+    setTimeout(() => { d.open = false; d.classList.remove('closing'); }, fast);
+  }));
 })();
 </script>
 </body>
