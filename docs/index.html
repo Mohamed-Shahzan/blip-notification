@@ -102,7 +102,10 @@
   .mark { width: 22px; height: 26px; }
   .hero { padding: var(--space-8) 0; text-align: center; }
   .hero p { margin-left: auto; margin-right: auto; }
-  .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-3); margin: var(--space-5) 0 var(--space-7); }
+  .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-3); margin: var(--space-5) 0 var(--space-4); }
+  /* One quiet line of facts under the buttons; each is backed in the questions below */
+  .meta { font: var(--size-xs)/var(--leading-body) var(--font-mono); color: var(--muted); margin: 0 auto var(--space-7); text-wrap: balance; }
+  .meta span { white-space: nowrap; } /* break between facts, never inside one */
 
   /* Screen frame: the hero demo */
   .screen { background: var(--sunken); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; text-align: left; }
@@ -148,7 +151,6 @@
   /* Sections */
   .block { padding: var(--space-9) 0; }
   .t-h2 { font: var(--weight-display) var(--size-xl)/var(--leading-tight) var(--font-display); margin: 0 0 var(--space-5); }
-  .two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-7); align-items: start; }
 
   /* State card: a button, so a click or Enter pokes its Sprout */
   .states { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); margin-bottom: var(--space-5); }
@@ -157,10 +159,6 @@
   .card canvas { display: block; width: 80px; height: 102px; margin: calc(-1 * var(--space-5)) 0 0 calc(-1 * var(--space-4)); }
   .card b { display: block; color: var(--ink); margin: var(--space-4) 0 var(--space-1); }
 
-  /* Facts: It stays out of Claude's way. Each fact has its proof under it */
-  .facts { display: grid; gap: var(--space-3); }
-  .fact { margin: 0; max-width: none; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-5); font-size: var(--size-sm); color: var(--muted); }
-  .fact b { display: block; color: var(--ink); font-size: var(--size-md); margin-bottom: var(--space-1); }
 
   /* Question */
   details { border-bottom: 1px solid var(--line); padding: var(--space-4) 0; }
@@ -175,7 +173,6 @@
     .hero { padding: var(--space-8) 0; }
     .block { padding: var(--space-8) 0; }
     .states { grid-template-columns: 1fr 1fr; }
-    .two { grid-template-columns: 1fr; gap: var(--space-5); }
     .desk { grid-template-columns: 1fr; padding: 0 var(--space-3) var(--space-3); }
   }
 </style>
@@ -189,6 +186,7 @@
     <div class="actions">
       <a class="btn main" href="https://github.com/Mohamed-Shahzan/blip-notification">GitHub</a>
     </div>
+    <p class="meta"><span>Free</span> · <span>Open source (MIT)</span> · <span>Never slows Claude</span> · <span>Nothing leaves your computer</span></p>
     <p class="t-small">This is your playground. Press Allow or Deny, or turn the Wi-Fi off.</p>
 
     <div class="screen" id="demo">
@@ -218,17 +216,6 @@
       <button class="card" type="button" data-state="error"><canvas aria-hidden="true"></canvas><b>Error</b>Red. It slumps. The bulb flickers until you go and look.</button>
     </div>
     <p class="t-small">Click Sprout a few times and it'll tell you what's going on. Click it a lot and it gets fed up.</p>
-  </section>
-
-  <section class="block two">
-    <div>
-      <h2 class="t-h2">It stays out of Claude's way</h2>
-      <p>Blip adds a small command that Claude Code runs at each step of its work. That's how Sprout knows what's going on.</p>
-    </div>
-    <div class="facts">
-      <p class="fact"><b>Claude never waits for it.</b>The command gives up after 2 seconds. I froze Blip on purpose, on a Mac and on Windows, and Claude didn't notice.</p>
-      <p class="fact"><b>Nothing leaves your computer.</b>Blip only listens on your own machine, never on the internet.</p>
-    </div>
   </section>
 
   <section class="block">
