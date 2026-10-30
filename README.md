@@ -51,7 +51,7 @@ You need about 15 minutes, most of it waiting for the first build.
 **1. Install the tools Blip is built with** (skip any you already have)
 
 - Apple's command line tools: `xcode-select --install`
-- Rust: follow [rustup.rs](https://rustup.rs)
+- Rust 1.85 or later: follow [rustup.rs](https://rustup.rs) (already have Rust? run `rustup update`)
 - Node.js 18 or later: [nodejs.org](https://nodejs.org)
 - Claude Code: [claude.com/claude-code](https://claude.com/claude-code)
 

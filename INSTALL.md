@@ -16,15 +16,20 @@ You are Claude Code, installing Blip for the person you are working with. Blip i
    - Apple command line tools: `xcode-select -p`
    - git: `git --version`
    - Node.js 18 or later: `node --version`
-   - Rust: `cargo --version`
+   - Rust 1.85 or later: `rustc --version`. If it is not found, also try `"$HOME/.cargo/bin/rustc" --version`: Rust may be installed but not yet on this shell's path.
+   - Claude Code's command line: `claude --version`. The plugin step needs it. People who only use the Claude Desktop app may not have it.
 2. **Install what is missing**, one tool at a time, asking first:
    - Apple command line tools: `xcode-select --install` (opens a system dialog the person must accept).
    - Node.js: if Homebrew is installed, `brew install node`; otherwise point the person to https://nodejs.org and wait for them.
-   - Rust: the official installer from https://rustup.rs, `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y`, then `source "$HOME/.cargo/env"`.
+   - Rust: the official installer from https://rustup.rs, `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y`. Each of your commands may start a fresh shell, so put `. "$HOME/.cargo/env" &&` in front of every later command that needs Rust, for example `. "$HOME/.cargo/env" && rustc --version`.
+   - Rust older than 1.85: `rustup update` (Blip uses the Rust 2024 edition, which older versions cannot build).
+   - Claude Code's command line: point the person to https://claude.com/claude-code and wait for them. Check again with `claude --version`.
 3. **Download Blip.** Ask where to put it (default `~/blip-notification`), then:
    `git clone https://github.com/Mohamed-Shahzan/blip-notification.git ~/blip-notification`
 4. **Install the app's packages.** `cd ~/blip-notification/app && npm install`
-5. **Build and start the Blip app.** Run `npm run tauri dev` in `~/blip-notification/app` in the background, since it keeps running. The first build takes several minutes. It is ready when the output shows `Running` and the line `target/debug/blip`. Tell the person that Blip runs while this keeps running, and that to start it again later they run `cd ~/blip-notification/app && npm run tauri dev` in a Terminal window.
+5. **Build and start the Blip app in the person's own Terminal.** Do not run it in your background: it would stop when this session ends, and Blip would disappear. Ask the person to open a new Terminal window (in the Terminal app, Cmd+N) and run:
+   `cd ~/blip-notification/app && npm run tauri dev`
+   The first build takes several minutes. It is ready when the output shows `Running` and the line `target/debug/blip`. Wait until they say it is ready, then check that Blip is listening: `lsof -nP -iTCP:47821 -sTCP:LISTEN` shows a `blip` line. Tell the person that Blip runs while that window stays open, and that next time only that command is needed.
 6. **Install the Claude Code plugin**, asking first, since it changes Claude Code's user settings:
    - `claude plugin marketplace add Mohamed-Shahzan/blip-notification`
    - `claude plugin install blip@blip-notification`
