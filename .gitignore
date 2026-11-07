@@ -34,3 +34,6 @@ docs/video/*
 !docs/video/blip-thumb.jpg
 !docs/video/blip-loop.gif
 !docs/.nojekyll
+
+# Demo Day deck and talk notes: personal, kept local (branch demo-day-notes)
+demo-day/
