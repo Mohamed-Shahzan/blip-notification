@@ -10,7 +10,7 @@
 
 A small animated character, Sprout, that sits at the top centre of your screen and tells you when Claude Code is done, needs you, or hit an error. You can look away while Claude works and Sprout calls you back.
 
-**Status: early preview, Mac only.** Everything below works on the Mac today. Windows support, sounds and a one-click app download are coming next.
+**Status: early preview, Mac only.** Everything below works on the Mac today. Windows support and a one-click app download are coming next.
 
 ## What you will see
 
