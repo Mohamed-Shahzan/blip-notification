@@ -257,47 +257,45 @@ fn machine(app: &AppHandle) -> MutexGuard<'_, state::Machine> {
 fn update_state(app: &AppHandle, event: Option<state::Event>) {
     let wanted = {
         let mut machine = machine(app);
-        let now = now();
         if let Some(event) = event {
-            machine.handle(event, now);
+            machine.handle(event, now());
             if let Some(thread) = STATE_THREAD.get() {
                 thread.unpark();
             }
         }
-        if let Some(shown) = machine.changed(now) {
-            // Only the state: the snippet and project are the user's and stay out of the log.
-            eprintln!("blip: state {:?}", shown.state);
-            let showing = match shown.state {
-                state::State::Hidden => HIDDEN,
-                state::State::Peek if shown.recall.is_none() => PEEK,
-                _ => FULL,
-            };
-            SHOWN.store(showing, Ordering::Relaxed);
-            if let Some(thread) = CURSOR_THREAD.get() {
-                thread.unpark();
-            }
-            let _ = app.emit("blip-state", shown);
-        }
-        let needs = machine.needs_presence();
-        let needed = NEEDS_PRESENCE.swap(needs, Ordering::Relaxed);
-        if needs
-            && !needed
-            && let Some(thread) = STATE_THREAD.get()
-        {
-            thread.unpark(); // so it starts looking
-        }
-        machine.apps_wanted()
+        machine.apps_wanted(now())
     };
-    // Each session's app is looked up once, outside the lock (it runs ps a few times).
-    let mut found = false;
+    // Each session's app is looked up outside the lock (it runs ps a few times),
+    // before working out what shows, so the first Done already knows its app.
+    // Not found: tried again a little later (state::APP_RETRY).
     for (session, pid) in wanted {
-        if let Some(found_app) = find_app(pid) {
-            machine(app).set_app(&session, found_app);
-            found = true;
+        if let Some(found) = find_app(pid) {
+            machine(app).set_app(&session, found);
         }
     }
-    if found {
-        update_state(app, None);
+    let mut machine = machine(app);
+    let now = now();
+    if let Some(shown) = machine.changed(now) {
+        // Only the state: the snippet and project are the user's and stay out of the log.
+        eprintln!("blip: state {:?}", shown.state);
+        let showing = match shown.state {
+            state::State::Hidden => HIDDEN,
+            state::State::Peek if shown.recall.is_none() => PEEK,
+            _ => FULL,
+        };
+        SHOWN.store(showing, Ordering::Relaxed);
+        if let Some(thread) = CURSOR_THREAD.get() {
+            thread.unpark();
+        }
+        let _ = app.emit("blip-state", shown);
+    }
+    let needs = machine.needs_presence();
+    let needed = NEEDS_PRESENCE.swap(needs, Ordering::Relaxed);
+    if needs
+        && !needed
+        && let Some(thread) = STATE_THREAD.get()
+    {
+        thread.unpark(); // so it starts looking
     }
 }
 

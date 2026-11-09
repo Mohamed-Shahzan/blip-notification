@@ -12,6 +12,9 @@ use std::collections::{HashMap, VecDeque};
 pub const DONE_FOR: f64 = 5.0;
 // The session's app in front, with the user active, this long counts as checked.
 const CHECK_AFTER: f64 = 2.0;
+// A session whose app was not found (a failed ps, a process tree with no app)
+// is looked up again after this many seconds, while Blip is awake anyway.
+const APP_RETRY: f64 = 10.0;
 // The project line is cut to this many characters.
 const PROJECT_MAX: usize = 40;
 // "Done" waits this long first: in the CLI, Esc sends Stop and the mod's "aborted"
@@ -245,8 +248,9 @@ struct Session {
     cwd: Option<String>,
     title: Option<String>,
     app: Option<App>,
-    // The app was looked up already (found or not), so it is not looked up again.
-    app_asked: bool,
+    // When the app was last looked up without finding it, so it is tried again
+    // only after APP_RETRY.
+    app_tried: Option<f64>,
     // A finish the user has not checked yet.
     finished: Option<Finished>,
 }
@@ -540,15 +544,18 @@ impl Machine {
         }
     }
 
-    // Sessions with a Claude process whose app was not looked up yet. Marked as
-    // asked, so each is looked up once.
-    pub fn apps_wanted(&mut self) -> Vec<(String, u32)> {
+    // Sessions with a Claude process and no app yet, not tried in the last
+    // APP_RETRY. Marked as tried; set_app ends the tries.
+    pub fn apps_wanted(&mut self, now: f64) -> Vec<(String, u32)> {
         self.sessions
             .iter_mut()
-            .filter(|(_, s)| !s.app_asked && s.pid.is_some())
-            .map(|(id, s)| {
-                s.app_asked = true;
-                (id.clone(), s.pid.unwrap_or_default())
+            .filter(|(_, s)| {
+                s.app.is_none() && s.app_tried.is_none_or(|at| now - at >= APP_RETRY)
+            })
+            .filter_map(|(id, s)| {
+                let pid = s.pid?;
+                s.app_tried = Some(now);
+                Some((id.clone(), pid))
             })
             .collect()
     }
@@ -886,6 +893,18 @@ mod tests {
         m.set_app("s", claude());
         assert_eq!(m.changed(0.0).map(|s| s.state), Some(State::Working));
         feed(m, "hook", hook("Stop", "s", "p"), 10.0);
+    }
+
+    // Code review 9 Nov: a lookup that found nothing was never tried again.
+    #[test]
+    fn app_not_found_is_tried_again_later() {
+        let mut m = Machine::default();
+        feed_sent(&mut m, hook("UserPromptSubmit", "s", "p"), 42, 0.0, 0.0);
+        assert_eq!(m.apps_wanted(0.0), vec![("s".to_string(), 42)]);
+        assert_eq!(m.apps_wanted(1.0), vec![]); // just tried
+        assert_eq!(m.apps_wanted(APP_RETRY), vec![("s".to_string(), 42)]);
+        m.set_app("s", claude());
+        assert_eq!(m.apps_wanted(100.0), vec![]); // found: done
     }
 
     fn state_after(m: &mut Machine, now: f64) -> State {
