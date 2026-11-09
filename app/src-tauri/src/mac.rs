@@ -10,7 +10,7 @@ use objc2_app_kit::{
 };
 
 use crate::state::App;
-use objc2_foundation::{NSDictionary, NSString};
+use objc2_foundation::{NSDictionary, NSNumber, NSString};
 
 #[link(name = "CoreGraphics", kind = "framework")]
 unsafe extern "C" {
@@ -52,10 +52,10 @@ pub fn screen_locked() -> Option<bool> {
     let raw = unsafe { CGSessionCopyCurrentDictionary() };
     // A "Copy" function: we own the dictionary, and Retained releases it.
     let dict: Retained<NSDictionary<NSString, AnyObject>> = unsafe { Retained::from_raw(raw)? };
-    Some(
-        dict.objectForKey(&NSString::from_str("CGSSessionScreenIsLocked"))
-            .is_some(),
-    )
+    // Its value, not only whether it is there (code review 9 Nov): absent or
+    // false is unlocked. Anything but a number counts as locked, as before.
+    let value = dict.objectForKey(&NSString::from_str("CGSSessionScreenIsLocked"));
+    Some(value.is_some_and(|v| v.downcast_ref::<NSNumber>().is_none_or(|n| n.boolValue())))
 }
 
 // True when the main display has gone to sleep (the user is away).

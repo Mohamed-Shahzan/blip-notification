@@ -549,9 +549,7 @@ impl Machine {
     pub fn apps_wanted(&mut self, now: f64) -> Vec<(String, u32)> {
         self.sessions
             .iter_mut()
-            .filter(|(_, s)| {
-                s.app.is_none() && s.app_tried.is_none_or(|at| now - at >= APP_RETRY)
-            })
+            .filter(|(_, s)| s.app.is_none() && s.app_tried.is_none_or(|at| now - at >= APP_RETRY))
             .filter_map(|(id, s)| {
                 let pid = s.pid?;
                 s.app_tried = Some(now);

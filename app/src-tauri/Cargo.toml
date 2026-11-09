@@ -27,7 +27,7 @@ tiny_http = "0.12"
 # forward (Phase 1 steps 6 and 7). All three already come with Tauri (Cargo.lock).
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSString", "NSDictionary"] }
+objc2-foundation = { version = "0.3", features = ["NSString", "NSDictionary", "NSValue"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "libc", "NSWorkspace", "NSRunningApplication"] }
 
 
