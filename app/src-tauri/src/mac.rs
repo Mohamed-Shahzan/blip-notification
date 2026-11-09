@@ -16,6 +16,8 @@ use objc2_foundation::{NSDictionary, NSString};
 unsafe extern "C" {
     fn CGEventSourceSecondsSinceLastEventType(state: i32, event_type: u32) -> f64;
     fn CGSessionCopyCurrentDictionary() -> *mut NSDictionary<NSString, AnyObject>;
+    fn CGMainDisplayID() -> u32;
+    fn CGDisplayIsAsleep(display: u32) -> u32;
 }
 
 // The front app's process id. Ask on the main thread: NSWorkspace updates it there.
@@ -54,6 +56,11 @@ pub fn screen_locked() -> Option<bool> {
         dict.objectForKey(&NSString::from_str("CGSSessionScreenIsLocked"))
             .is_some(),
     )
+}
+
+// True when the main display has gone to sleep (the user is away).
+pub fn display_asleep() -> bool {
+    unsafe { CGDisplayIsAsleep(CGMainDisplayID()) != 0 }
 }
 
 // Brings the app with this process id to the front. False if macOS said no.

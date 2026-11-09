@@ -39,9 +39,11 @@ const ALIVE_CHECK: f64 = 15.0;
 // While a finish is not checked yet, how often Blip looks at the front app,
 // idle time and lock (DECISIONS 9 Nov: "about 2 s" in front counts as checked).
 const PRESENCE_POLL: f64 = 0.5;
-// The user counts as active with mouse or keyboard input this recently.
+// The user counts as active with mouse or keyboard input this recently. 5 min,
+// not 1: watching Claude work without touching anything is still being there
+// (Mohamed's test, 9 Nov). A locked screen or a sleeping display is away at once.
 #[cfg(target_os = "macos")]
-const ACTIVE_WITHIN: f64 = 60.0;
+const ACTIVE_WITHIN: f64 = 300.0;
 
 // The state thread, woken after each event so it can plan its next wake.
 static STATE_THREAD: OnceLock<thread::Thread> = OnceLock::new();
@@ -399,7 +401,9 @@ fn on_main<T: Send + 'static>(
 #[cfg(target_os = "macos")]
 fn read_presence(app: &AppHandle) -> Option<state::Presence> {
     let front = remember_front(app)?;
-    let active = mac::idle_seconds() < ACTIVE_WITHIN && mac::screen_locked() != Some(true);
+    let active = mac::idle_seconds() < ACTIVE_WITHIN
+        && mac::screen_locked() != Some(true)
+        && !mac::display_asleep();
     Some(state::Presence { front, active })
 }
 #[cfg(not(target_os = "macos"))]
