@@ -145,7 +145,7 @@ td.low { color: var(--warn); font-weight: 600; }
 
   <section>
     <h2>2. The done bubble</h2>
-    <p class="muted">Sprout shows with the bubble and stays until you press the x. Then Sprout goes up and the waiting look you picked above stays. Real size.</p>
+    <p class="muted">Sprout shows with "Work done" and stays until you press the x. Then Sprout goes up and peeks under the notch. Click the peek and Sprout drops back down to say when Claude finished. Real size.</p>
     <div class="flow">
       <div>
         <div class="screen tall" id="flowScreen">
@@ -161,11 +161,13 @@ td.low { color: var(--warn); font-weight: 600; }
         <div class="step" id="step"></div>
       </div>
       <div class="opts">
-        <div><div class="label">Line</div><div class="group" id="lineBtns"></div></div>
-        <label class="check"><input type="checkbox" id="showDetail"> Claude's first line under it</label>
-        <label class="check"><input type="checkbox" id="clickable"> Bubble is clickable (open point)</label>
-        <button id="replay">Play again</button>
-        <p class="note">Clicking the waiting look clears it here, only so the sketch can be replayed. What really clears it is still open.</p>
+        <label class="check"><input type="checkbox" id="showDetail"> Claude's first line under "Work done"</label>
+        <div><div class="label">Click on the peek says</div><div class="group" id="recallBtns"></div></div>
+        <div><div class="label">Claude finished (pretend)</div><div class="group" id="agoBtns"></div></div>
+        <label class="check"><input type="checkbox" id="project" checked> Project line (not checked yet if Blip can know it)</label>
+        <label class="check"><input type="checkbox" id="clickable"> Clicking the bubble opens Claude (open point)</label>
+        <div class="group"><button id="checked">Pretend I checked Claude</button><button id="replay">Play again</button></div>
+        <p class="note">Click the peek to ask Sprout what it is waiting for. Clicking it never clears it: only checking Claude does.</p>
       </div>
     </div>
   </section>
@@ -303,69 +305,90 @@ function pickLook(id) {
   }
 
 // ---------- the done flow ----------
+// Phases: 'first' (Work done bubble), 'waiting' (peek under the notch), 'recall' (clicked the peek, Sprout back
+// down with when it finished), 'cleared' (Claude checked, nothing on screen).
 const flowScreen = document.getElementById('flowScreen');
 const flowCv = document.getElementById('flowSprout');
 const bubble = document.getElementById('bubble'), stepEl = document.getElementById('step');
-const FLOW_NOTCH = 24;
-let waiting = false;
+const lineEl = document.getElementById('bubbleLine'), detailEl = document.getElementById('bubbleDetail');
+const FLOW_NOTCH = 24, PROJECT = 'blip-notification', FIRST_LINE = 'I updated the header layout and ran the tests, all 42 pass.';
+let phase = 'cleared', recall = 'ago', ago = '25 min ago', timers = [];
 {
   const cs = BlipSprout.canvasSize(32);
   // Sprout's body hangs just under the notch, as in the app (its canvas is raised so the antenna tucks in).
   Object.assign(flowCv.style, { width: cs.width + 'px', height: cs.height + 'px', left: `calc(50% - ${cs.width / 2}px)`, top: (FLOW_NOTCH - 4) + 'px' });
 }
-const flowSprout = BlipSprout.create(flowCv, { size: 32, bubble: false, handlePress: false, settings: { colors: { done: doneHex } } });
+// No easter eggs here, so every done looks the same.
+const flowSprout = BlipSprout.create(flowCv, { size: 32, bubble: false, handlePress: false, settings: { colors: { done: doneHex }, eggs: false } });
 sprouts.push(flowSprout);
-painters.push({ canvas: document.getElementById('flowWait'), notch: FLOW_NOTCH, scale: U, look: () => pickedLook, on: () => waiting });
+painters.push({ canvas: document.getElementById('flowWait'), notch: FLOW_NOTCH, scale: U, look: () => pickedLook, on: () => phase === 'waiting' });
 
+const later = (fn, ms) => timers.push(setTimeout(fn, ms));
 function placeBubble() {
   const cs = BlipSprout.canvasSize(32), cx = flowScreen.clientWidth / 2;
   bubble.style.left = (cx + 48 * U) + 'px';
   bubble.style.top = (FLOW_NOTCH - 4 + cs.height * .6 + 6 * U - bubble.offsetHeight / 2) + 'px';
 }
+// The bubble's two lines for the current phase and options.
+function fillBubble() {
+  const proj = document.getElementById('project').checked;
+  let line = 'Work done', detail = '';
+  if (phase === 'first') detail = document.getElementById('showDetail').checked ? FIRST_LINE : '';
+  else if (recall === 'ago') { line = 'Work done, ' + ago; detail = proj ? PROJECT : ''; }
+  else { line = 'Work done, ready when you are'; detail = 'Finished ' + ago + (proj ? ' \u00b7 ' + PROJECT : ''); }
+  lineEl.textContent = line;
+  detailEl.textContent = detail; detailEl.hidden = !detail;
+  placeBubble();
+}
+function showSprout(ph, msg) {
+  phase = ph;
+  flowSprout.setState('done');
+  later(() => { fillBubble(); bubble.classList.remove('off'); stepEl.textContent = msg; }, 650);
+}
+function goUp(ph) {
+  bubble.classList.add('off');
+  flowSprout.setState('hidden');
+  phase = 'up';
+  later(() => { phase = ph; }, 450);
+}
 function play() {
-  waiting = false;
-  flowSprout.setState('hidden');
-  bubble.classList.add('off');
-  stepEl.textContent = '';
-  setTimeout(() => {
-    flowSprout.setState('done');
-    setTimeout(() => { placeBubble(); bubble.classList.remove('off'); stepEl.textContent = 'Claude finished. The bubble stays until you press the x.'; }, 700);
-  }, 500);
+  timers.forEach(clearTimeout); timers = [];
+  phase = 'cleared'; bubble.classList.add('off'); flowSprout.setState('hidden'); stepEl.textContent = '';
+  later(() => showSprout('first', 'Claude finished. The bubble stays until you press the x.'), 500);
 }
-function closeBubble(e) {
+document.getElementById('bubbleX').onclick = e => {
   e.stopPropagation();
-  bubble.classList.add('off');
-  flowSprout.setState('hidden');
-  stepEl.textContent = 'Closed. Sprout goes up, the waiting look stays until you check the result.';
-  setTimeout(() => { waiting = true; }, 450);
+  goUp('waiting');
+  stepEl.textContent = 'Closed. Sprout peeks under the notch until you check Claude. Click the peek to ask what it is.';
+};
+// Checking the result (here: a button, or the clickable bubble) is the only thing that clears the peek.
+function checked(how) {
+  if (phase === 'cleared') return;
+  goUp('cleared');
+  stepEl.textContent = how + ' Counts as checked, so the peek goes away.';
 }
-document.getElementById('bubbleX').onclick = closeBubble;
 bubble.onclick = () => {
   if (!bubble.classList.contains('clickable')) return;
-  stepEl.textContent = 'Bubble clicked: here the app would bring Claude to the front (open point, not decided).';
+  checked('Bubble clicked: the app would bring Claude to the front.');
 };
+document.getElementById('checked').onclick = () => checked('You opened Claude.');
 flowScreen.onclick = e => {
-  if (!waiting) return;
+  if (phase !== 'waiting') return;
   const r = flowScreen.getBoundingClientRect(), x = e.clientX - r.left - r.width / 2, y = e.clientY - r.top - FLOW_NOTCH;
-  if (Math.abs(x) < 20 && y > -4 && y < 26) { waiting = false; stepEl.textContent = 'Waiting look cleared (sketch only). Press "Play again".'; }
+  if (Math.abs(x) < 22 && y > -4 && y < 30) showSprout('recall', 'You clicked the peek: Sprout says when Claude finished. The x sends it back up, the peek stays.');
 };
 document.getElementById('replay').onclick = play;
 
-const LINES = ['Work done', "Claude's done", 'Finished, take a look', 'Your turn'];
-const lineBtns = document.getElementById('lineBtns');
-LINES.forEach((l, i) => {
-  const b = document.createElement('button'); b.textContent = l; b.classList.toggle('on', !i);
-  b.onclick = () => {
-    document.getElementById('bubbleLine').textContent = l;
-    lineBtns.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); placeBubble();
-  };
-  lineBtns.appendChild(b);
-});
-document.getElementById('showDetail').onchange = e => {
-  const d = document.getElementById('bubbleDetail');
-  d.hidden = !e.target.checked; d.textContent = "I updated the header layout and ran the tests, all 42 pass.";
-  placeBubble();
-};
+function buttonRow(el, items, start, onPick) {
+  items.forEach(([label, v]) => {
+    const b = document.createElement('button'); b.textContent = label; b.classList.toggle('on', v === start);
+    b.onclick = () => { el.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); onPick(v); if (phase === 'first' || phase === 'recall') fillBubble(); };
+    el.appendChild(b);
+  });
+}
+buttonRow(document.getElementById('recallBtns'), [['"Work done, 25 min ago"', 'ago'], ['"Ready when you are"', 'ready']], recall, v => { recall = v; });
+buttonRow(document.getElementById('agoBtns'), [['Just now', 'just now'], ['25 min ago', '25 min ago'], ['3 h ago', '3 h ago']], ago, v => { ago = v; });
+for (const id of ['showDetail', 'project']) document.getElementById(id).onchange = () => { if (phase === 'first' || phase === 'recall') fillBubble(); };
 document.getElementById('clickable').onchange = e => bubble.classList.toggle('clickable', e.target.checked);
 
 // ---------- colour check ----------
