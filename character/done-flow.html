@@ -80,22 +80,22 @@ body.wall-light { --wall: linear-gradient(135deg, #e6eefa 0%, #f6f1e7 55%, #f7dc
 .check { display: flex; align-items: center; gap: 8px; }
 .bubble {
   position: absolute; z-index: 2; display: flex; align-items: flex-start; gap: 6px;
-  font: 600 12px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  color: #1f1d2b; background: #fff; padding: 6px 4px 6px 10px; border-radius: 12px 12px 12px 3px;
+  font: 600 14px/1.25 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #1f1d2b; background: #fff; padding: 8px 6px 8px 13px; border-radius: 14px 14px 14px 4px;
   box-shadow: 0 2px 10px rgba(0,0,0,.25); border: 1px solid rgba(0,0,0,.1);
   transition: opacity .2s, transform .2s; transform-origin: left center;
 }
 .bubble.clickable { cursor: pointer; }
 .bubble.clickable:hover { background: #f4f6ff; }
 .bubble.off { opacity: 0; transform: scale(.8); pointer-events: none; }
-.bubble .detail { font-size: 11px; font-weight: 400; line-height: 1.25; color: #6b6878; margin-top: 2px; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bubble .detail { font-size: 12px; font-weight: 400; line-height: 1.25; color: #6b6878; margin-top: 2px; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bubble .x {
-  flex: none; width: 22px; height: 22px; margin: -3px 0 -3px 0; padding: 0; border: 0; border-radius: 50%;
+  flex: none; width: 26px; height: 26px; margin: -4px 0 -4px 2px; padding: 0; border: 0; border-radius: 50%;
   background: transparent; color: #6b6878; display: grid; place-items: center; cursor: pointer;
 }
 .bubble .x:hover { background: rgba(0,0,0,.08); color: #1f1d2b; }
 .bubble .x:focus-visible { outline: 2px solid #3d6bff; outline-offset: 0; }
-.bubble .x svg { width: 10px; height: 10px; }
+.bubble .x svg { width: 11px; height: 11px; }
 .step { font-size: 12px; color: var(--muted); min-height: 18px; margin-top: 8px; }
 
 /* Colour check. */
@@ -139,7 +139,7 @@ td.low { color: var(--warn); font-weight: 600; }
 
   <section>
     <h2>1. The waiting bulb</h2>
-    <p class="muted">After the bubble is closed, something small stays under the notch until you look at the result. It must never read as the working bulb (first card), which already means "still busy". Real size on top, three times bigger below. Click a card to mark your pick.</p>
+    <p class="muted">After the bubble is closed, something small stays under the notch until you look at the result. It must never read as the working bulb (first card), which already means "still busy". Real size on top, three times bigger below. C is the pick (9 Nov); A and B stay for reference.</p>
     <div class="cards" id="looks"></div>
   </section>
 
@@ -195,7 +195,7 @@ const DONE = [
   ['Teal green', '#1fc7a3'],
   ['Teal', '#2ec4b6']
 ];
-let doneHex = DONE[0][1];
+let doneHex = DONE[1][1]; // Teal green, picked 9 Nov
 const sprouts = [];
 const U = 32 / 75; // pixels per drawing unit at the app's size (32 px body)
 
@@ -213,7 +213,7 @@ function star(ctx, x, y, r, rot) {
 const LOOKS = {
   // A: no stalk, a bead tucked under the notch with a tick. Still; the glow breathes slowly.
   check: {
-    name: 'A. Tick bead', feel: 'no stalk, tick, still',
+    name: 'A. Tick bead', feel: 'not picked',
     blurb: 'Tucked right under the notch, no stalk. A white tick. Only the glow breathes, every 4 s.',
     draw(ctx, c, t, k) {
       const r = 9.5, y = 8, b = .5 + .5 * Math.sin(t * TAU / 4);
@@ -226,7 +226,7 @@ const LOOKS = {
   },
   // B: same stalk as working, but the bulb becomes Sprout's done star. Still, with a small sparkle every 6 s.
   star: {
-    name: 'B. Star on the stalk', feel: 'same place, new shape',
+    name: 'B. Star on the stalk', feel: 'not picked',
     blurb: 'Hangs where the working bulb hangs, but the bulb turns into the done star. A small sparkle every 6 s.',
     draw(ctx, c, t, k) {
       stalk(ctx, c, 11);
@@ -239,24 +239,27 @@ const LOOKS = {
   },
   // C: Sprout peeks down from under the notch with happy eyes. A character, not a light.
   peek: {
-    name: 'C. Sprout peeking', feel: 'character, not a light',
-    blurb: 'The bottom of Sprout peeks out under the notch with happy eyes, swaying a little. Clearly not a bulb.',
+    name: 'C. Sprout peeking', feel: 'picked 9 Nov',
+    blurb: 'Sprout peeks out under the notch with happy eyes and a small smile, swaying a little. Clearly not a bulb.',
     draw(ctx, c, t, k) {
-      const tint = shade(c, .38), rot = Math.sin(t * 1.3) * .05, drop = 1 + Math.sin(t * 2.6) * .6;
+      // 1.3 times the first sketch and lower, so the eyes and smile read at real size (Mohamed, 9 Nov).
+      const tint = shade(c, .38), rot = Math.sin(t * 1.3) * .05, drop = 1 + Math.sin(t * 2.6) * .8;
       ctx.save(); ctx.beginPath(); ctx.rect(-60, 0, 120, 60); ctx.clip();
-      ctx.translate(0, drop); ctx.rotate(rot);
-      const g = ctx.createLinearGradient(0, -20, 0, 18);
+      ctx.scale(1.3, 1.3); ctx.translate(0, drop); ctx.rotate(rot);
+      const g = ctx.createLinearGradient(0, -14, 0, 26);
       g.addColorStop(0, rgba(shade(tint, .25))); g.addColorStop(1, rgba(shade(tint, -.08)));
       ctx.shadowColor = rgba(c, .75); ctx.shadowBlur = 6 * k;
-      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, 1, 24, 20, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, 6, 24, 20, 0, 0, TAU); ctx.fill();
       ctx.shadowBlur = 0; ctx.strokeStyle = rimOf(c); ctx.lineWidth = 3; ctx.stroke();
-      ctx.strokeStyle = rgba(INK); ctx.lineWidth = 3; ctx.lineCap = 'round';
-      for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(s * 8, 10, 4, Math.PI * 1.12, Math.PI * 1.88); ctx.stroke(); }
+      ctx.strokeStyle = ctx.fillStyle = rgba(INK); ctx.lineWidth = 3; ctx.lineCap = 'round';
+      for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(s * 8, 13, 4, Math.PI * 1.12, Math.PI * 1.88); ctx.stroke(); }
+      // The done smile from sprout.js, smaller.
+      ctx.beginPath(); ctx.moveTo(-3.4, 17.5); ctx.quadraticCurveTo(0, 23, 3.4, 17.5); ctx.closePath(); ctx.fill();
       ctx.restore();
     }
   }
 };
-let pickedLook = 'check';
+let pickedLook = 'peek';
 
 // ---------- mock screens ----------
 function screenHtml(cls) {
@@ -297,8 +300,7 @@ for (const [id, look] of Object.entries(LOOKS)) {
 function pickLook(id) {
   pickedLook = id;
   looksEl.querySelectorAll('.card[data-id]').forEach(c => c.classList.toggle('picked', c.dataset.id === id));
-  try { localStorage.setItem('blip-doneflow-look', id); } catch (e) {}
-}
+  }
 
 // ---------- the done flow ----------
 const flowScreen = document.getElementById('flowScreen');
@@ -311,7 +313,7 @@ let waiting = false;
   // Sprout's body hangs just under the notch, as in the app (its canvas is raised so the antenna tucks in).
   Object.assign(flowCv.style, { width: cs.width + 'px', height: cs.height + 'px', left: `calc(50% - ${cs.width / 2}px)`, top: (FLOW_NOTCH - 4) + 'px' });
 }
-const flowSprout = BlipSprout.create(flowCv, { size: 32, bubble: false, handlePress: false });
+const flowSprout = BlipSprout.create(flowCv, { size: 32, bubble: false, handlePress: false, settings: { colors: { done: doneHex } } });
 sprouts.push(flowSprout);
 painters.push({ canvas: document.getElementById('flowWait'), notch: FLOW_NOTCH, scale: U, look: () => pickedLook, on: () => waiting });
 
@@ -440,7 +442,6 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 
-try { const saved = localStorage.getItem('blip-doneflow-look'); if (LOOKS[saved]) pickedLook = saved; } catch (e) {}
 pickLook(pickedLook);
 play();
 </script>
