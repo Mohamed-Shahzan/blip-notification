@@ -79,7 +79,9 @@ canvas.addEventListener("contextmenu", (e) => {
   } catch {}
   // In a state with a line, show it again with the snippet added or taken away;
   // otherwise say what changed.
-  if (last.state === "done" && !last.quiet) doneBubble(last, true);
+  // The done bubbles (also quiet, and the peek's recall) are redrawn as they
+  // were: replacing them would lose the x (code review 9 Nov).
+  if (last.state === "done" || last.recall) doneBubble(last, true);
   else if (SPEAKS.includes(sprout.state) && !sprout.peek) speak();
   else sprout.say(showText ? "Message text on" : "Message text off", true, 1500, null);
   sendBox();
