@@ -4,6 +4,8 @@
 // dev build started with BLIP_LOG=1 (see record).
 // The state (state.rs) goes to the page as "blip-state", where Sprout shows it.
 
+#[cfg(target_os = "macos")]
+mod mac;
 mod state;
 
 use serde::Deserialize;
@@ -12,7 +14,7 @@ use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -34,6 +36,12 @@ const HALF_WRITTEN: Duration = Duration::from_secs(2);
 const STALE: Duration = Duration::from_secs(30);
 // While sessions are open, how often Blip checks that their Claude process still runs.
 const ALIVE_CHECK: f64 = 15.0;
+// While a finish is not checked yet, how often Blip looks at the front app,
+// idle time and lock (DECISIONS 9 Nov: "about 2 s" in front counts as checked).
+const PRESENCE_POLL: f64 = 0.5;
+// The user counts as active with mouse or keyboard input this recently.
+#[cfg(target_os = "macos")]
+const ACTIVE_WITHIN: f64 = 60.0;
 
 // The state thread, woken after each event so it can plan its next wake.
 static STATE_THREAD: OnceLock<thread::Thread> = OnceLock::new();
@@ -44,9 +52,21 @@ static CURSOR_THREAD: OnceLock<thread::Thread> = OnceLock::new();
 // The page sends that box ("sprout-box", in window points); the cursor loop
 // checks it about 30 times a second while Sprout is shown, and sleeps otherwise.
 // The same loop feeds the cursor to Sprout's eyes.
-static SHOWN: AtomicBool = AtomicBool::new(false);
-static SPROUT_BOX: Mutex<Option<HitBox>> = Mutex::new(None);
+// What shows: HIDDEN, PEEK or FULL (any other state).
+static SHOWN: AtomicU8 = AtomicU8::new(HIDDEN);
+const HIDDEN: u8 = 0;
+const PEEK: u8 = 1;
+const FULL: u8 = 2;
+// The clickable parts: Sprout's body, and the bubble or the peek while they show.
+static HIT_BOXES: Mutex<Vec<HitBox>> = Mutex::new(Vec::new());
 const CURSOR_POLL: Duration = Duration::from_millis(33);
+// While only peeking, slower: the peek barely moves, and it can last for hours.
+const PEEK_POLL: Duration = Duration::from_millis(100);
+// Set while the machine needs to know what the user is doing (front app, idle, lock).
+static NEEDS_PRESENCE: AtomicBool = AtomicBool::new(false);
+// The last app in front that was not Blip: a click on Blip makes Blip the front
+// app (focus test, 9 Nov), so focus goes back here after a click on the x or the peek.
+static LAST_FRONT: Mutex<Option<i32>> = Mutex::new(None);
 
 #[derive(Clone, Copy, Deserialize)]
 struct HitBox {
@@ -76,7 +96,10 @@ pub fn run() {
                 window.set_position(PhysicalPosition::new(x, origin.y))?;
             }
 
-            app.manage(Mutex::new(state::Machine::default()));
+            let mut machine = state::Machine::default();
+            let home = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
+            machine.set_home(std::env::var(home).ok());
+            app.manage(Mutex::new(machine));
             let handle = app.handle().clone();
             thread::spawn(move || listen(handle));
             let handle = app.handle().clone();
@@ -86,9 +109,16 @@ pub fn run() {
             let _ = STATE_THREAD.set(thread.thread().clone());
 
             app.listen("sprout-box", |event| {
-                if let Ok(hit) = serde_json::from_str::<HitBox>(event.payload()) {
-                    *SPROUT_BOX.lock().unwrap_or_else(|p| p.into_inner()) = Some(hit);
+                if let Ok(boxes) = serde_json::from_str::<Vec<HitBox>>(event.payload()) {
+                    *HIT_BOXES.lock().unwrap_or_else(|p| p.into_inner()) = boxes;
                 }
+            });
+            let handle = app.handle().clone();
+            app.listen("blip-click", move |event| {
+                let what = event.payload().trim_matches('"').to_string();
+                let app = handle.clone();
+                // Its own thread: the work below waits on the main thread, where this may run.
+                thread::spawn(move || click(&app, &what));
             });
             let thread = thread::spawn(move || watch_cursor(window));
             let _ = CURSOR_THREAD.set(thread.thread().clone());
@@ -160,7 +190,8 @@ fn watch_cursor(window: tauri::WebviewWindow) {
     let mut hovering = false;
     let mut last = None;
     loop {
-        let shown = SHOWN.load(Ordering::Relaxed);
+        let showing = SHOWN.load(Ordering::Relaxed);
+        let shown = showing != HIDDEN;
         let cursor = if shown {
             cursor_in_window(&window).ok()
         } else {
@@ -174,12 +205,18 @@ fn watch_cursor(window: tauri::WebviewWindow) {
         if over != hovering {
             hovering = over;
             let _ = window.emit("hover", over);
+            // Before a click makes Blip the front app, note the app the user is in.
+            if over {
+                remember_front(window.app_handle());
+            }
         }
         if over == ignoring && window.set_ignore_cursor_events(!over).is_ok() {
             ignoring = !over;
             eprintln!("blip: clicks {}", if over { "on" } else { "off" });
         }
-        if shown {
+        if showing == PEEK && !over {
+            thread::sleep(PEEK_POLL);
+        } else if shown {
             thread::sleep(CURSOR_POLL);
         } else {
             thread::park(); // update_state wakes it when Sprout shows
@@ -200,8 +237,11 @@ fn cursor_in_window(window: &tauri::WebviewWindow) -> tauri::Result<(f64, f64)> 
 }
 
 fn over_sprout((x, y): (f64, f64)) -> bool {
-    let hit = *SPROUT_BOX.lock().unwrap_or_else(|p| p.into_inner());
-    hit.is_some_and(|hit| x >= hit.x && x <= hit.x + hit.w && y >= hit.y && y <= hit.y + hit.h)
+    HIT_BOXES
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .iter()
+        .any(|hit| x >= hit.x && x <= hit.x + hit.w && y >= hit.y && y <= hit.y + hit.h)
 }
 
 fn machine(app: &AppHandle) -> MutexGuard<'_, state::Machine> {
@@ -211,29 +251,64 @@ fn machine(app: &AppHandle) -> MutexGuard<'_, state::Machine> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-// Feeds one event (or none, for the timer) and tells the page if the state or its snippet changed.
+// Feeds one event (or none, for the timer) and tells the page if anything shown changed.
 fn update_state(app: &AppHandle, event: Option<state::Event>) {
-    let mut machine = machine(app);
-    let now = now();
-    if let Some(event) = event {
-        machine.handle(event, now);
-        if let Some(thread) = STATE_THREAD.get() {
-            thread.unpark();
+    // Read before taking the lock: it waits on the main thread.
+    let presence = NEEDS_PRESENCE
+        .load(Ordering::Relaxed)
+        .then(|| read_presence(app));
+    let wanted = {
+        let mut machine = machine(app);
+        let now = now();
+        if let Some(event) = event {
+            machine.handle(event, now);
+            if let Some(thread) = STATE_THREAD.get() {
+                thread.unpark();
+            }
+        }
+        if let Some(presence) = presence {
+            machine.set_presence(presence, now);
+        }
+        if let Some(shown) = machine.changed(now) {
+            // Only the state: the snippet and project are the user's and stay out of the log.
+            eprintln!("blip: state {:?}", shown.state);
+            let showing = match shown.state {
+                state::State::Hidden => HIDDEN,
+                state::State::Peek if shown.recall.is_none() => PEEK,
+                _ => FULL,
+            };
+            SHOWN.store(showing, Ordering::Relaxed);
+            if let Some(thread) = CURSOR_THREAD.get() {
+                thread.unpark();
+            }
+            let _ = app.emit("blip-state", shown);
+        }
+        let needs = machine.needs_presence();
+        let needed = NEEDS_PRESENCE.swap(needs, Ordering::Relaxed);
+        if needs
+            && !needed
+            && let Some(thread) = STATE_THREAD.get()
+        {
+            thread.unpark(); // so it starts looking
+        }
+        machine.apps_wanted()
+    };
+    // Each session's app is looked up once, outside the lock (it runs ps a few times).
+    let mut found = false;
+    for (session, pid) in wanted {
+        if let Some(found_app) = find_app(pid) {
+            machine(app).set_app(&session, found_app);
+            found = true;
         }
     }
-    if let Some(shown) = machine.changed(now) {
-        // Only the state: the snippet is the user's text and stays out of the log.
-        eprintln!("blip: state {:?}", shown.state);
-        SHOWN.store(shown.state != state::State::Hidden, Ordering::Relaxed);
-        if let Some(thread) = CURSOR_THREAD.get() {
-            thread.unpark();
-        }
-        let _ = app.emit("blip-state", shown);
+    if found {
+        update_state(app, None);
     }
 }
 
-// Sleeps until "Done" is due to show or hide, or the next process check while
-// sessions are open. With nothing open and nothing due, it sleeps until an event.
+// Sleeps until "Done" is due to show or hide, the next process check while
+// sessions are open, or the next look at the front app while a finish is not
+// checked yet. With nothing to do, it sleeps until an event.
 fn watch_state(app: AppHandle) {
     let mut checked = now();
     loop {
@@ -242,7 +317,15 @@ fn watch_state(app: AppHandle) {
             (machine.next_change(now()), !machine.is_empty())
         };
         let check = open.then_some(checked + ALIVE_CHECK);
-        match due.into_iter().chain(check).min_by(f64::total_cmp) {
+        let look = NEEDS_PRESENCE
+            .load(Ordering::Relaxed)
+            .then(|| now() + PRESENCE_POLL);
+        match due
+            .into_iter()
+            .chain(check)
+            .chain(look)
+            .min_by(f64::total_cmp)
+        {
             Some(at) => thread::park_timeout(Duration::from_secs_f64((at - now()).max(0.0))),
             None => thread::park(),
         }
@@ -258,6 +341,130 @@ fn watch_state(app: AppHandle) {
         }
         update_state(&app, None);
     }
+}
+
+// A click on Sprout's window ("blip-click"): "x", "peek", or "sprout" for
+// Sprout's body or its bubble (DECISIONS 9 Nov, one click).
+fn click(app: &AppHandle, what: &str) {
+    let now = now();
+    let target = machine(app).click_target(now);
+    match what {
+        "x" => {
+            machine(app).close_bubble();
+            hand_back(app);
+        }
+        "peek" => {
+            machine(app).open_recall();
+            hand_back(app);
+        }
+        _ => match target {
+            // Opening the session's app is checking it.
+            Some(pid) if bring_forward(app, pid) => machine(app).checked_app(pid),
+            // The app is unknown: the click only closes a Done bubble.
+            _ => {
+                machine(app).close_bubble();
+                hand_back(app);
+            }
+        },
+    }
+    eprintln!("blip: click {what}");
+    update_state(app, None);
+}
+
+// Gives focus back to the app the user was in before clicking Blip.
+fn hand_back(app: &AppHandle) {
+    let last = *LAST_FRONT.lock().unwrap_or_else(|p| p.into_inner());
+    if let Some(pid) = last {
+        bring_forward(app, pid);
+    }
+}
+
+// Runs f on the main thread and waits for it, at most 250 ms. Never call it on
+// the main thread itself (it would wait for itself, then give up).
+#[cfg(target_os = "macos")]
+fn on_main<T: Send + 'static>(
+    app: &AppHandle,
+    f: impl FnOnce() -> T + Send + 'static,
+) -> Option<T> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let _ = tx.send(f());
+    })
+    .ok()?;
+    rx.recv_timeout(Duration::from_millis(250)).ok()
+}
+
+// The front app (never Blip: then the app before it), idle time and lock.
+// None when the front app could not be read: Blip then acts as if it does not know.
+#[cfg(target_os = "macos")]
+fn read_presence(app: &AppHandle) -> Option<state::Presence> {
+    let front = remember_front(app)?;
+    let active = mac::idle_seconds() < ACTIVE_WITHIN && mac::screen_locked() != Some(true);
+    Some(state::Presence { front, active })
+}
+#[cfg(not(target_os = "macos"))]
+fn read_presence(_app: &AppHandle) -> Option<state::Presence> {
+    None // Windows: GetForegroundWindow and GetLastInputInfo, in the Windows batch
+}
+
+// Reads the front app and, unless it is Blip, keeps it as LAST_FRONT. Returns
+// the front app with Blip replaced by the one before it; None if it failed.
+#[cfg(target_os = "macos")]
+fn remember_front(app: &AppHandle) -> Option<Option<i32>> {
+    let front = on_main(app, mac::front_app)?;
+    let mut last = LAST_FRONT.lock().unwrap_or_else(|p| p.into_inner());
+    if front == Some(std::process::id() as i32) {
+        return Some(*last);
+    }
+    if front.is_some() {
+        *last = front;
+    }
+    Some(front)
+}
+#[cfg(not(target_os = "macos"))]
+fn remember_front(_app: &AppHandle) -> Option<Option<i32>> {
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn bring_forward(app: &AppHandle, pid: i32) -> bool {
+    on_main(app, move || mac::bring_forward(pid)).unwrap_or(false)
+}
+#[cfg(not(target_os = "macos"))]
+fn bring_forward(_app: &AppHandle, _pid: i32) -> bool {
+    false
+}
+
+// The app a session runs in: up from its Claude process to the first regular
+// app (RESEARCH.md, Session 9: zsh, claude, disclaimer, then Claude).
+#[cfg(target_os = "macos")]
+fn find_app(pid: u32) -> Option<state::App> {
+    let mut pid = pid as i32;
+    for _ in 0..32 {
+        if let Some(found) = mac::regular_app(pid) {
+            return Some(found);
+        }
+        pid = parent(pid)?;
+        if pid <= 1 {
+            return None;
+        }
+    }
+    None
+}
+#[cfg(not(target_os = "macos"))]
+fn find_app(_pid: u32) -> Option<state::App> {
+    None
+}
+
+#[cfg(target_os = "macos")]
+fn parent(pid: i32) -> Option<i32> {
+    let out = Command::new("/bin/ps")
+        .args(["-o", "ppid=", "-p", &pid.to_string()])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    String::from_utf8_lossy(&out.stdout).trim().parse().ok()
 }
 
 // True unless the check says for sure the process is gone, so a failed check never ends a session.

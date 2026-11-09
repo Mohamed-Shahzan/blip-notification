@@ -7,8 +7,13 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::{HashMap, VecDeque};
 
-// How long "Done" stays up before Blip hides again (PRD: about 5 s).
+// How long "Done" stays up when the session's app was already in front and the
+// user active (the quiet rule, DECISIONS 9 Nov). Otherwise Done stays until the x.
 pub const DONE_FOR: f64 = 5.0;
+// The session's app in front, with the user active, this long counts as checked.
+const CHECK_AFTER: f64 = 2.0;
+// The project line is cut to this many characters.
+const PROJECT_MAX: usize = 40;
 // "Done" waits this long first: in the CLI, Esc sends Stop and the mod's "aborted"
 // follows up to one inbox poll (100 ms) later. Until then Blip keeps showing Working.
 const SETTLE: f64 = 0.2;
@@ -31,6 +36,8 @@ const REMEMBER: usize = 64;
 pub enum State {
     #[default]
     Hidden,
+    // Sprout peeking under the notch: a finished session not checked yet.
+    Peek,
     Done,
     Working,
     Error,
@@ -49,6 +56,9 @@ pub struct Event {
     pid: Option<u32>,
     // How the turn ended, in words: the last reply (Stop) or the error (StopFailure).
     text: Option<String>,
+    // Where the session works (hooks only), and the chat's title when it has one.
+    cwd: Option<String>,
+    title: Option<String>,
     kind: Kind,
 }
 
@@ -124,6 +134,11 @@ pub fn translate(src: &str, msg: &Value) -> Option<Event> {
                 sent: None,
                 pid: None,
                 text: said.and_then(snippet),
+                cwd: text("cwd").map(str::to_string),
+                title: text("session_title")
+                    .map(str::trim)
+                    .filter(|t| !t.is_empty())
+                    .map(str::to_string),
                 kind,
             })
         }
@@ -144,6 +159,8 @@ pub fn translate(src: &str, msg: &Value) -> Option<Event> {
                 sent: msg.get("ts").and_then(Value::as_f64),
                 pid: None,
                 text: None,
+                cwd: None,
+                title: None,
                 kind: Kind::TurnEnd(end),
             })
         }
@@ -165,13 +182,47 @@ pub struct Machine {
     sessions: HashMap<String, Session>,
     ended: VecDeque<String>,
     shown: Shown,
+    // What the user is doing, while Blip needs to know (see needs_presence).
+    presence: Option<Presence>,
+    // Since when the presence above has been the same.
+    presence_since: f64,
+    // The peek was clicked: Sprout is down with "All done, <time>".
+    recall: bool,
+    // The user's home folder, shown as "~" in the project line.
+    home: Option<String>,
 }
 
-// What the page gets: the state and the snippet under Sprout's line.
+// The app in front (its process id, never Blip itself) and whether the user
+// used the mouse or keyboard lately with the screen unlocked.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Presence {
+    pub front: Option<i32>,
+    pub active: bool,
+}
+
+// The app a session runs in: its process id and its name ("Claude", "Terminal").
+#[derive(Clone, Debug, PartialEq)]
+pub struct App {
+    pub pid: i32,
+    pub name: String,
+}
+
+// What the page gets: the state, the snippet under Sprout's line, and for Done
+// and the peek what the bubble says around it.
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Shown {
     pub state: State,
     pub text: Option<String>,
+    // The app a click opens ("Click me to open <app>"), when known.
+    pub app: Option<String>,
+    // "blip-notification · Done flow" (Done and the peek).
+    pub project: Option<String>,
+    // Done with the session's app already in front: about 5 s, no x, no hint.
+    pub quiet: bool,
+    // Other finished sessions not checked yet ("+N more").
+    pub more: usize,
+    // The peek was clicked: how long ago Claude finished ("25 min ago").
+    pub recall: Option<String>,
 }
 
 #[derive(Default)]
@@ -190,6 +241,23 @@ struct Session {
     asked_at: f64,
     // The snippet of how the last turn ended.
     text: Option<String>,
+    // The first folder the session reported and its chat title.
+    cwd: Option<String>,
+    title: Option<String>,
+    app: Option<App>,
+    // The app was looked up already (found or not), so it is not looked up again.
+    app_asked: bool,
+    // A finish the user has not checked yet.
+    finished: Option<Finished>,
+}
+
+struct Finished {
+    at: f64,
+    // Decided once, SETTLE after the finish: was the session's app in front?
+    // None until then, or when Blip could not tell (then the full flow).
+    quiet: Option<bool>,
+    // The bubble is open (until the x); closed, Sprout peeks.
+    bubble: bool,
 }
 
 #[derive(Clone, Copy, Default, PartialEq)]
@@ -216,6 +284,12 @@ impl Machine {
         if event.pid.is_some() {
             s.pid = event.pid;
         }
+        if s.cwd.is_none() {
+            s.cwd = event.cwd;
+        }
+        if event.title.is_some() {
+            s.title = event.title;
+        }
 
         // A subagent only matters while it waits for the user, which can outlast the main turn.
         if let Some(agent) = event.agent {
@@ -232,6 +306,9 @@ impl Machine {
             }
             if before > 0 && s.subagent_asks.is_empty() && !s.running {
                 s.ended_at = now; // "Done" counts from when the wait ended
+                if let Some(f) = &mut s.finished {
+                    f.at = now;
+                }
             }
             return;
         }
@@ -272,12 +349,22 @@ impl Machine {
                     s.outcome = Outcome::Quiet
                 }
                 Kind::TurnEnd(End::Error) => s.outcome = Outcome::Error,
-                _ => {}
+                _ => return,
+            }
+            // That turn was not a finish to announce after all.
+            if s.finished.as_ref().is_some_and(|f| f.at == s.ended_at) {
+                s.finished = None;
             }
             return;
         }
         match event.kind {
-            Kind::Prompt(self_started) => s.self_started = self_started,
+            Kind::Prompt(self_started) => {
+                s.self_started = self_started;
+                // The user typed again: they have seen the last result.
+                if !self_started {
+                    s.finished = None;
+                }
+            }
             Kind::Asks(ask) => {
                 s.asks.push(ask);
                 s.asked_at = now;
@@ -293,6 +380,13 @@ impl Machine {
                     End::Answer if !s.asks.is_empty() || s.self_started => Outcome::Quiet,
                     End::Answer => Outcome::Done,
                 };
+                if s.outcome == Outcome::Done {
+                    s.finished = Some(Finished {
+                        at: now,
+                        quiet: None,
+                        bubble: true,
+                    });
+                }
                 s.asks.clear();
             }
             Kind::Tool | Kind::SubagentEnd | Kind::SessionEnd => {}
@@ -325,15 +419,20 @@ impl Machine {
             .unwrap_or_default()
     }
 
-    // What Sprout's bubble says under the state line: from the session that decides
-    // the state, what it asks (needs you) or how its turn ended (done, error).
-    pub fn text(&self, now: f64) -> Option<String> {
-        // Among sessions in the same state, the one that got there last.
-        let s = self.sessions.values().max_by(|a, b| {
+    // The session that decides what shows: the most urgent, and among sessions in
+    // the same state the one that got there last.
+    fn top(&self, now: f64) -> Option<&Session> {
+        self.sessions.values().max_by(|a, b| {
             let (sa, sb) = (a.state(now), b.state(now));
             sa.cmp(&sb)
                 .then(a.changed_at(sa).total_cmp(&b.changed_at(sb)))
-        })?;
+        })
+    }
+
+    // What Sprout's bubble says under the state line: from the session that decides
+    // the state, what it asks (needs you) or how its turn ended (done, error).
+    pub fn text(&self, now: f64) -> Option<String> {
+        let s = self.top(now)?;
         match s.state(now) {
             State::NeedsYou => s.subagent_asks.iter().chain(&s.asks).last().map(Ask::text),
             State::Done | State::Error => s.text.clone(),
@@ -341,22 +440,162 @@ impl Machine {
         }
     }
 
-    // The next time the state changes by itself ("Done" showing, then hiding).
+    // The next time the state changes by itself: Done showing after SETTLE, and
+    // the quiet Done hiding again.
     pub fn next_change(&self, now: f64) -> Option<f64> {
         self.sessions
             .values()
-            .filter(|s| s.outcome == Outcome::Done && !s.running)
-            .flat_map(|s| [s.ended_at + SETTLE, s.ended_at + SETTLE + DONE_FOR])
+            .filter_map(|s| s.finished.as_ref())
+            .flat_map(|f| {
+                let hide = (f.quiet != Some(false)).then_some(f.at + SETTLE + DONE_FOR);
+                [Some(f.at + SETTLE), hide]
+            })
+            .flatten()
             .filter(|&t| t > now)
             .min_by(f64::total_cmp)
     }
 
-    // What to show, if the state or its snippet differs from what was shown last.
-    pub fn changed(&mut self, now: f64) -> Option<Shown> {
-        let shown = Shown {
-            state: self.state(now),
+    // True while Blip needs to know what the user is doing: a finish waits for
+    // its quiet decision, or is not checked yet.
+    pub fn needs_presence(&self) -> bool {
+        self.sessions.values().any(|s| s.finished.is_some())
+    }
+
+    // What the user is doing now (Mac: front app, idle time, lock).
+    pub fn set_presence(&mut self, presence: Option<Presence>, now: f64) {
+        if presence != self.presence {
+            self.presence = presence;
+            self.presence_since = now;
+        }
+    }
+
+    // Applies the rules that depend on time and presence: the quiet decision at
+    // SETTLE, the quiet Done ending, and checking by having the app in front.
+    fn tick(&mut self, now: f64) {
+        let presence = self.presence;
+        let checked = presence
+            .filter(|p| p.active && now - self.presence_since >= CHECK_AFTER)
+            .and_then(|p| p.front);
+        for s in self.sessions.values_mut() {
+            let app = s.app.as_ref().map(|a| a.pid);
+            let Some(f) = &mut s.finished else { continue };
+            if f.quiet.is_none() && now >= f.at + SETTLE {
+                let in_front =
+                    presence.is_some_and(|p| p.active && p.front.is_some() && p.front == app);
+                f.quiet = Some(in_front);
+                f.bubble = !in_front;
+            }
+            let over = match f.quiet {
+                Some(true) => now >= f.at + SETTLE + DONE_FOR,
+                Some(false) => checked.is_some() && checked == app,
+                None => false,
+            };
+            if over {
+                s.finished = None;
+            }
+        }
+        if !self.sessions.values().any(Session::peeks) {
+            self.recall = false;
+        }
+        // Nothing to watch: forget, so a stale reading never counts later.
+        if !self.needs_presence() {
+            self.presence = None;
+        }
+    }
+
+    // The x: the bubble closes and Sprout goes up to peek.
+    pub fn close_bubble(&mut self) {
+        for f in self
+            .sessions
+            .values_mut()
+            .filter_map(|s| s.finished.as_mut())
+        {
+            if f.quiet == Some(false) {
+                f.bubble = false;
+            }
+        }
+        self.recall = false;
+    }
+
+    // A click on the peek: Sprout comes down with "All done, <time>".
+    pub fn open_recall(&mut self) {
+        self.recall = self.sessions.values().any(Session::peeks);
+    }
+
+    // The app a click on Sprout or its bubble opens: the session that decides
+    // what shows (for the peek, the latest finish).
+    pub fn click_target(&self, now: f64) -> Option<i32> {
+        Some(self.top(now)?.app.as_ref()?.pid)
+    }
+
+    // The user went to this app: every finish in it counts as checked.
+    pub fn checked_app(&mut self, pid: i32) {
+        for s in self.sessions.values_mut() {
+            if s.app.as_ref().is_some_and(|a| a.pid == pid) {
+                s.finished = None;
+            }
+        }
+        if !self.sessions.values().any(Session::peeks) {
+            self.recall = false;
+        }
+    }
+
+    // Sessions with a Claude process whose app was not looked up yet. Marked as
+    // asked, so each is looked up once.
+    pub fn apps_wanted(&mut self) -> Vec<(String, u32)> {
+        self.sessions
+            .iter_mut()
+            .filter(|(_, s)| !s.app_asked && s.pid.is_some())
+            .map(|(id, s)| {
+                s.app_asked = true;
+                (id.clone(), s.pid.unwrap_or_default())
+            })
+            .collect()
+    }
+
+    pub fn set_app(&mut self, session: &str, app: App) {
+        if let Some(s) = self.sessions.get_mut(session) {
+            s.app = Some(app);
+        }
+    }
+
+    pub fn set_home(&mut self, home: Option<String>) {
+        self.home = home;
+    }
+
+    pub fn shown(&self, now: f64) -> Shown {
+        let state = self.state(now);
+        let mut shown = Shown {
+            state,
             text: self.text(now),
+            ..Shown::default()
         };
+        if let Some(s) = self.top(now) {
+            shown.app = s.app.as_ref().map(|a| a.name.clone());
+            if matches!(state, State::Done | State::Peek) {
+                shown.project = s
+                    .cwd
+                    .as_deref()
+                    .map(|cwd| project_line(cwd, s.title.as_deref(), self.home.as_deref()));
+                let f = s.finished.as_ref();
+                shown.quiet = f.is_some_and(|f| f.quiet == Some(true));
+                shown.more = self
+                    .sessions
+                    .values()
+                    .filter(|o| o.peeks() && !std::ptr::eq(*o, s))
+                    .count();
+                if state == State::Peek && self.recall {
+                    shown.recall = f.map(|f| ago(now - f.at));
+                }
+            }
+        }
+        shown
+    }
+
+    // What to show, if anything differs from what was shown last.
+    pub fn changed(&mut self, now: f64) -> Option<Shown> {
+        self.tick(now);
+        let shown = self.shown(now);
         (shown != self.shown).then(|| {
             self.shown = shown.clone();
             shown
@@ -367,25 +606,40 @@ impl Machine {
 impl Session {
     // When the session reached this state: its latest ask, or the end of its turn.
     fn changed_at(&self, state: State) -> f64 {
-        if state == State::NeedsYou {
-            self.asked_at
-        } else {
-            self.ended_at
+        match state {
+            State::NeedsYou => self.asked_at,
+            State::Done | State::Peek => self.finished.as_ref().map_or(self.ended_at, |f| f.at),
+            _ => self.ended_at,
         }
+    }
+
+    // A finish the user still has to check (not a quiet one, which ends by itself).
+    fn peeks(&self) -> bool {
+        self.finished
+            .as_ref()
+            .is_some_and(|f| f.quiet != Some(true))
     }
 
     fn state(&self, now: f64) -> State {
         if !self.subagent_asks.is_empty() || !self.asks.is_empty() {
             return State::NeedsYou;
         }
-        let since = now - self.ended_at;
-        match self.outcome {
-            _ if self.running && self.self_started => State::Hidden,
-            _ if self.running => State::Working,
-            Outcome::Error => State::Error,
-            Outcome::Done if since < SETTLE => State::Working,
-            Outcome::Done if since < SETTLE + DONE_FOR => State::Done,
-            _ => State::Hidden,
+        if self.running && !self.self_started {
+            return State::Working;
+        }
+        if !self.running && self.outcome == Outcome::Error {
+            return State::Error;
+        }
+        let Some(f) = &self.finished else {
+            return State::Hidden;
+        };
+        let since = now - f.at;
+        match f.quiet {
+            _ if since < SETTLE => State::Working,
+            Some(true) if since < SETTLE + DONE_FOR => State::Done,
+            Some(true) => State::Hidden,
+            _ if f.bubble => State::Done,
+            _ => State::Peek,
         }
     }
 }
@@ -402,6 +656,49 @@ impl Ask {
                 self.tool.rsplit("__").next().unwrap_or(&self.tool)
             ),
         }
+    }
+}
+
+// How long ago Claude finished, in coarser steps the longer it gets (DECISIONS
+// 9 Nov): "just now", "N min ago", "N h ago" with the real hours, "yesterday",
+// "N days ago". Counted from the time passed, not the calendar day. No cap.
+pub fn ago(secs: f64) -> String {
+    let secs = secs.max(0.0) as u64;
+    match secs {
+        0..60 => "just now".into(),
+        60..3600 => format!("{} min ago", secs / 60),
+        3600..86400 => format!("{} h ago", secs / 3600),
+        86400..172800 => "yesterday".into(),
+        _ => format!("{} days ago", secs / 86400),
+    }
+}
+
+// "blip-notification · Done flow": the project folder's name, with a worktree's
+// own folder left out, and the chat title when there is one. The home folder
+// itself shows as "~". Mac and Windows paths. Cut to PROJECT_MAX characters.
+pub fn project_line(cwd: &str, title: Option<&str>, home: Option<&str>) -> String {
+    let mut path = cwd;
+    for marker in ["/.claude/worktrees/", "\\.claude\\worktrees\\"] {
+        if let Some(i) = path.find(marker) {
+            path = &path[..i];
+        }
+    }
+    let path = path.trim_end_matches(['/', '\\']);
+    let is_home = home.is_some_and(|h| h.trim_end_matches(['/', '\\']) == path);
+    let name = match path.rsplit(['/', '\\']).next() {
+        _ if is_home => "~",
+        Some(name) if !name.is_empty() => name,
+        _ => cwd,
+    };
+    let line = match title {
+        Some(t) => format!("{name} · {t}"),
+        None => name.to_string(),
+    };
+    match line.char_indices().nth(PROJECT_MAX - 1) {
+        Some((cut, _)) if line.chars().count() > PROJECT_MAX => {
+            format!("{}…", line[..cut].trim_end())
+        }
+        _ => line,
     }
 }
 
@@ -566,19 +863,268 @@ mod tests {
         assert_eq!(m.state(4.0), State::Working);
     }
 
-    #[test]
-    fn done_hides_after_five_seconds() {
-        let mut m = Machine::default();
-        feed(&mut m, "hook", hook("UserPromptSubmit", "s", "p"), 0.0);
+    const CLAUDE: i32 = 7;
+    const NOTES: i32 = 8;
+
+    fn claude() -> App {
+        App {
+            pid: CLAUDE,
+            name: "Claude".into(),
+        }
+    }
+
+    fn here(front: i32, active: bool) -> Option<Presence> {
+        Some(Presence {
+            front: Some(front),
+            active,
+        })
+    }
+
+    // A session in the Claude app that finished at 10.
+    fn finished_at_10(m: &mut Machine) {
+        feed(m, "hook", hook("UserPromptSubmit", "s", "p"), 0.0);
+        m.set_app("s", claude());
         assert_eq!(m.changed(0.0).map(|s| s.state), Some(State::Working));
-        feed(&mut m, "hook", hook("Stop", "s", "p"), 10.0);
+        feed(m, "hook", hook("Stop", "s", "p"), 10.0);
+    }
+
+    fn state_after(m: &mut Machine, now: f64) -> State {
+        m.changed(now);
+        m.state(now)
+    }
+
+    #[test]
+    fn done_with_claude_in_front_hides_after_five_seconds() {
+        let mut m = Machine::default();
+        finished_at_10(&mut m);
+        m.set_presence(here(CLAUDE, true), 10.0);
         assert_eq!(m.next_change(10.0), Some(10.0 + SETTLE));
         assert_eq!(m.changed(10.0).map(|s| s.state), None);
-        assert_eq!(m.changed(10.25).map(|s| s.state), Some(State::Done));
+        let shown = m.changed(10.25).unwrap();
+        assert_eq!((shown.state, shown.quiet), (State::Done, true));
         assert_eq!(m.next_change(10.25), Some(10.0 + SETTLE + DONE_FOR));
         assert_eq!(m.changed(15.1).map(|s| s.state), None);
         assert_eq!(m.changed(15.25).map(|s| s.state), Some(State::Hidden));
         assert_eq!(m.next_change(15.25), None);
+        assert!(!m.needs_presence()); // no peek after a quiet Done
+    }
+
+    #[test]
+    fn done_elsewhere_stays_until_the_x_then_peeks() {
+        let mut m = Machine::default();
+        finished_at_10(&mut m);
+        m.set_presence(here(NOTES, true), 10.0);
+        let shown = m.changed(10.25).unwrap();
+        assert_eq!((shown.state, shown.quiet), (State::Done, false));
+        assert_eq!(shown.app.as_deref(), Some("Claude"));
+        assert_eq!(state_after(&mut m, 3600.0), State::Done); // no timer
+        m.close_bubble();
+        assert_eq!(state_after(&mut m, 3601.0), State::Peek);
+        assert_eq!(m.click_target(3601.0), Some(CLAUDE));
+    }
+
+    #[test]
+    fn claude_in_front_while_the_user_is_away_is_the_full_flow() {
+        let mut m = Machine::default();
+        finished_at_10(&mut m);
+        m.set_presence(here(CLAUDE, false), 10.0); // idle or locked
+        assert_eq!(state_after(&mut m, 60.0), State::Done);
+        assert!(!m.changed(60.0).is_some_and(|s| s.quiet));
+    }
+
+    #[test]
+    fn without_presence_done_is_the_full_flow() {
+        // Windows for now, or the front app could not be read.
+        let mut m = Machine::default();
+        finished_at_10(&mut m);
+        assert_eq!(state_after(&mut m, 60.0), State::Done);
+    }
+
+    #[test]
+    fn two_seconds_back_in_claude_counts_as_checked() {
+        let mut m = Machine::default();
+        finished_at_10(&mut m);
+        m.set_presence(here(NOTES, true), 10.0);
+        m.changed(10.25);
+        m.close_bubble();
+        m.set_presence(here(CLAUDE, true), 20.0);
+        assert_eq!(state_after(&mut m, 21.5), State::Peek); // a quick pass by Claude
+        m.set_presence(here(NOTES, true), 21.6);
+        m.set_presence(here(CLAUDE, true), 30.0);
+        assert_eq!(state_after(&mut m, 32.0), State::Hidden);
+        assert!(!m.needs_presence());
+    }
+
+    #[test]
+    fn coming_back_while_the_bubble_shows_clears_it_too() {
+        let mut m = Machine::default();
+        finished_at_10(&mut m);
+        m.set_presence(here(CLAUDE, false), 10.0);
+        assert_eq!(state_after(&mut m, 10.25), State::Done);
+        m.set_presence(here(CLAUDE, true), 100.0); // the user is back
+        assert_eq!(state_after(&mut m, 101.0), State::Done);
+        assert_eq!(state_after(&mut m, 102.0), State::Hidden);
+    }
+
+    #[test]
+    fn a_new_prompt_clears_the_peek_but_a_self_started_turn_does_not() {
+        let mut m = Machine::default();
+        finished_at_10(&mut m);
+        m.changed(10.25);
+        m.close_bubble();
+        let mut auto = hook("UserPromptSubmit", "s", "p2");
+        auto["prompt"] = json!("<task-notification>x</task-notification>");
+        feed(&mut m, "hook", auto, 20.0);
+        assert_eq!(state_after(&mut m, 20.0), State::Peek);
+        feed(&mut m, "hook", hook("Stop", "s", "p2"), 21.0);
+        assert_eq!(state_after(&mut m, 22.0), State::Peek);
+        feed(&mut m, "hook", hook("UserPromptSubmit", "s", "p3"), 30.0);
+        assert_eq!(state_after(&mut m, 30.0), State::Working);
+        feed(
+            &mut m,
+            "mod",
+            json!({ "kind": "turn.complete", "session": "s", "reason": "aborted" }),
+            31.0,
+        );
+        assert_eq!(state_after(&mut m, 31.0), State::Hidden);
+    }
+
+    #[test]
+    fn the_session_ending_clears_the_peek() {
+        let mut m = Machine::default();
+        finished_at_10(&mut m);
+        m.changed(10.25);
+        m.close_bubble();
+        m.end("s");
+        assert_eq!(state_after(&mut m, 11.0), State::Hidden);
+    }
+
+    #[test]
+    fn the_peek_click_says_how_long_ago() {
+        let mut m = Machine::default();
+        finished_at_10(&mut m);
+        m.changed(10.25);
+        m.close_bubble();
+        m.open_recall();
+        let shown = m.changed(10.0 + 25.0 * 60.0).unwrap();
+        assert_eq!(shown.state, State::Peek);
+        assert_eq!(shown.recall.as_deref(), Some("25 min ago"));
+        m.close_bubble(); // its x
+        assert_eq!(m.changed(10.0 + 26.0 * 60.0).unwrap().recall, None);
+    }
+
+    #[test]
+    fn a_click_that_opens_claude_checks_it() {
+        let mut m = Machine::default();
+        finished_at_10(&mut m);
+        m.changed(10.25);
+        m.checked_app(CLAUDE);
+        assert_eq!(state_after(&mut m, 11.0), State::Hidden);
+    }
+
+    #[test]
+    fn several_sessions_the_peek_comes_last_and_counts_the_others() {
+        let mut m = Machine::default();
+        for (id, at) in [("a", 10.0), ("b", 20.0)] {
+            feed(&mut m, "hook", hook("UserPromptSubmit", id, "p"), 0.0);
+            feed(&mut m, "hook", hook("Stop", id, "p"), at);
+        }
+        m.set_app("a", claude());
+        m.set_app(
+            "b",
+            App {
+                pid: 9,
+                name: "Terminal".into(),
+            },
+        );
+        let shown = m.changed(21.0).unwrap();
+        assert_eq!(
+            (shown.state, shown.app.as_deref(), shown.more),
+            (State::Done, Some("Terminal"), 1)
+        );
+        m.close_bubble();
+        feed(&mut m, "hook", hook("UserPromptSubmit", "c", "p"), 22.0);
+        assert_eq!(state_after(&mut m, 22.0), State::Working); // working beats the peek
+        feed(&mut m, "hook", hook("SessionEnd", "c", "p"), 23.0);
+        assert_eq!(state_after(&mut m, 23.0), State::Peek);
+        m.checked_app(9);
+        let shown = m.changed(24.0).unwrap();
+        assert_eq!(
+            (shown.state, shown.app.as_deref(), shown.more),
+            (State::Peek, Some("Claude"), 0)
+        );
+    }
+
+    #[test]
+    fn the_time_wording() {
+        let cases = [
+            (0.0, "just now"),
+            (59.0, "just now"),
+            (60.0, "1 min ago"),
+            (25.0 * 60.0, "25 min ago"),
+            (3599.0, "59 min ago"),
+            (3600.0, "1 h ago"),
+            (12.0 * 3600.0, "12 h ago"),
+            (86399.0, "23 h ago"),
+            (86400.0, "yesterday"),
+            (2.0 * 86400.0, "2 days ago"),
+            (40.0 * 86400.0, "40 days ago"),
+            (-5.0, "just now"),
+        ];
+        for (secs, words) in cases {
+            assert_eq!(ago(secs), words, "{secs} s");
+        }
+    }
+
+    #[test]
+    fn the_project_line() {
+        let home = Some("/Users/mac");
+        let line = |cwd, title| project_line(cwd, title, home);
+        assert_eq!(
+            line("/Users/mac/Documents/Claude/blip-notification", None),
+            "blip-notification"
+        );
+        assert_eq!(
+            line(
+                "/Users/mac/Documents/Claude/blip-notification",
+                Some("Done flow")
+            ),
+            "blip-notification · Done flow"
+        );
+        assert_eq!(
+            line("/Users/mac/code/app/.claude/worktrees/brave-fox", None),
+            "app"
+        );
+        assert_eq!(line("/Users/mac/", None), "~");
+        assert_eq!(line("C:\\Users\\mo\\Projects\\blip\\", None), "blip");
+        assert_eq!(
+            project_line("C:\\Users\\mo", None, Some("C:\\Users\\mo")),
+            "~"
+        );
+        assert_eq!(line("C:\\code\\app\\.claude\\worktrees\\x", None), "app");
+        let long = line(
+            "/x/blip-notification",
+            Some("A very long chat title that goes on and on"),
+        );
+        assert_eq!(long.chars().count(), PROJECT_MAX);
+        assert!(long.starts_with("blip-notification · A very") && long.ends_with('…'));
+    }
+
+    #[test]
+    fn the_project_comes_from_the_first_folder_and_the_latest_title() {
+        let mut m = Machine::default();
+        let mut first = hook("UserPromptSubmit", "s", "p");
+        first["cwd"] = json!("/Users/mac/blip");
+        feed(&mut m, "hook", first, 0.0);
+        let mut later = hook("PreToolUse", "s", "p");
+        later["cwd"] = json!("/Users/mac/blip/app");
+        feed(&mut m, "hook", later, 1.0);
+        let mut next = hook("UserPromptSubmit", "s", "p2");
+        next["session_title"] = json!("Done flow");
+        feed(&mut m, "hook", next, 2.0);
+        feed(&mut m, "hook", hook("Stop", "s", "p2"), 3.0);
+        let shown = m.changed(4.0).unwrap();
+        assert_eq!(shown.project.as_deref(), Some("blip · Done flow"));
     }
 
     #[test]
