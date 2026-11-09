@@ -255,10 +255,6 @@ fn machine(app: &AppHandle) -> MutexGuard<'_, state::Machine> {
 
 // Feeds one event (or none, for the timer) and tells the page if anything shown changed.
 fn update_state(app: &AppHandle, event: Option<state::Event>) {
-    // Read before taking the lock: it waits on the main thread.
-    let presence = NEEDS_PRESENCE
-        .load(Ordering::Relaxed)
-        .then(|| read_presence(app));
     let wanted = {
         let mut machine = machine(app);
         let now = now();
@@ -267,9 +263,6 @@ fn update_state(app: &AppHandle, event: Option<state::Event>) {
             if let Some(thread) = STATE_THREAD.get() {
                 thread.unpark();
             }
-        }
-        if let Some(presence) = presence {
-            machine.set_presence(presence, now);
         }
         if let Some(shown) = machine.changed(now) {
             // Only the state: the snippet and project are the user's and stay out of the log.
@@ -341,7 +334,21 @@ fn watch_state(app: AppHandle) {
                 }
             }
         }
+        look_around(&app);
         update_state(&app, None);
+    }
+}
+
+// While a finish is not checked yet: what the user is doing (front app, idle,
+// lock). Only this thread reads it, so readings land in order; events reuse
+// the latest. A failed read keeps the one before.
+fn look_around(app: &AppHandle) {
+    if !NEEDS_PRESENCE.load(Ordering::Relaxed) {
+        return;
+    }
+    // Read before taking the lock: it waits on the main thread.
+    if let Some(presence) = read_presence(app) {
+        machine(app).set_presence(Some(presence), now());
     }
 }
 
