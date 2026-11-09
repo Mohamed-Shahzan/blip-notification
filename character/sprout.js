@@ -633,7 +633,14 @@
       bubble.style.pointerEvents = bubbleActs ? 'auto' : 'none';
       bubble.style.cursor = click ? 'pointer' : 'default';
       bubble.style.paddingRight = close ? '4px' : '10px';
-      bubble.onclick = click ? e => { e.stopPropagation(); click(); } : null;
+      // On the press, not the click: Blip's window is rarely the front app, and there a click on plain text
+      // did not arrive while a press on Sprout and a click on the x did (Mohamed's test, 9 Nov). The x keeps
+      // its own click. Text is not selectable, so a press never starts a selection instead.
+      bubble.style.userSelect = bubble.style.webkitUserSelect = click ? 'none' : '';
+      bubble.onpointerdown = click ? e => {
+        if (e.button !== 0 || e.target.closest('button')) return;
+        e.stopPropagation(); click();
+      } : null;
       if (close) {
         const x = document.createElement('button');
         x.type = 'button'; x.setAttribute('aria-label', 'Close');
