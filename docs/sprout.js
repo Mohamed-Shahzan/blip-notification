@@ -20,6 +20,16 @@
 //   sprout.setCompact(true);      // shrink into the small form (the antenna bulb on a short stalk, a slow ripple
 //                                 // every 5 s), false grows back; opts.compactTop: where the stalk hangs from, in
 //                                 // CSS pixels from the canvas top (Blip: the window's top edge)
+//   sprout.setPeek(true);         // after Done: Sprout goes up and only its lower face peeks out under the top edge
+//                                 // (same hang point as compact), swaying a little; false comes back down.
+//                                 // opts.peekSize: the peek's size as a body size in px (default: size)
+//   sprout.say(text, announce, Infinity, detail, { onClose, onClick });  // a bubble that stays until closed:
+//                                 // onClose adds an x button, onClick makes the bubble clickable. detail can be
+//                                 // a list of grey lines
+//   sprout.hitBoxes();            // [{x, y, w, h}] around everything clickable now (body or peek, and the bubble)
+//   sprout.setHover(part);        // 'body', 'bubble', 'x' or null: what the pointer is over, for a host that
+//                                 // tracks the pointer itself. Sprout grows a little, the bubble or x tints
+//   sprout.partAt(x, y);          // which of those parts is at a client point (null for none)
 //   sprout.update(settings);      // change some settings live; the rest keep their values
 //   Options for testing the easter eggs: opts.luck (chance of a lucky leaf per done), opts.date (a function
 //   returning the Date to use).
@@ -66,7 +76,7 @@
     speed: 1, bounce: 1, trans: .35, blinkEvery: 3.5,
     mBlink: true, mRead: true, mError: true, mDone: true, mContact: true, mChange: true, mGlance: true, mHand: true,
     eggs: true, // the five easter eggs (see EGGS below)
-    colors: { working: '#4f8cff', needs: '#ffb13b', done: '#33c46a', error: '#ff5a5f' }
+    colors: { working: '#4f8cff', needs: '#ffb13b', done: '#1fc7a3', error: '#ff5a5f' }
   };
   // Allowed ranges, the same as the playground sliders. Out-of-range numbers are clamped, other values ignored.
   const RANGES = {
@@ -102,7 +112,7 @@
   // themselves; working between midnight and 5 am turns the bulb into a crescent moon; every ROLL_EVERY done
   // in a row without an error gets circling stars; Blip's birthday (first session log, 18 Oct) gets confetti.
   const EGGS = { HOLD_MS: 3000, LUCK: 1 / 20, LUCKY_MS: 4000, ROLL_EVERY: 5, ROLL_MS: 3500, BIRTHDAY: [9, 18], PARTY_MS: 3500 };
-  const LEAF = [92, 196, 104], CONFETTI = ['#ffb13b', '#4f8cff', '#33c46a', '#ff5a5f', '#b98cff'];
+  const LEAF = [92, 196, 104], CONFETTI = ['#ffb13b', '#4f8cff', '#1fc7a3', '#ff5a5f', '#b98cff'];
   const hash = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
   // Drawing box: the character lives in a 100 x 100 unit box; 75 units of body is the "size" in pixels.
   const UNITS_PER_SIZE = 75;
@@ -111,6 +121,9 @@
   // Compact form: the stalk's length, how much bigger the bulb is than on full Sprout (alone it needs it to
   // be seen, Mohamed 30 Oct), its radius, and the sign of life's period, in drawing units and seconds.
   const STALK = 13, SMALL = 1.4, SMALL_R = 6.5 * SMALL, PULSE = 5;
+  // Peek (done flow, look C picked 9 Nov in character/done-flow.html): the lower part of a happy face under the
+  // top edge, PEEK times the sketch's drawing, PEEK_RX wide and reaching PEEK_DOWN below the edge (drawing units).
+  const PEEK = 1.3, PEEK_RX = 24 * PEEK, PEEK_DOWN = 28 * PEEK;
   // Click ladder. Clicks count as one streak while each comes within STREAK_GAP ms of the last:
   // 3 clicks say what Sprout is doing; from 6 on it is fed up (tired eyes, antenna flopped over) until the
   // clicks stop for FED_HOLD ms.
@@ -387,6 +400,25 @@
     ctx.restore();
   }
 
+  // The peek, with the hang point at 0,0: Sprout's lower face in a light tint of its colour, closed happy eyes
+  // and the done smile, swaying a little. Clipped at the hang point so it seems to hang from the top edge.
+  function drawPeek(ctx, st) {
+    const c = st.col, t = st.t, tint = shade(c, .38);
+    const rot = st.reduce ? 0 : Math.sin(t * 1.3) * .05, drop = st.reduce ? 1 : 1 + Math.sin(t * 2.6) * .8;
+    ctx.save(); ctx.globalAlpha = st.alpha;
+    ctx.beginPath(); ctx.rect(-60, 0, 120, 60); ctx.clip();
+    ctx.scale(PEEK, PEEK); ctx.translate(0, drop); ctx.rotate(rot);
+    const g = ctx.createLinearGradient(0, -14, 0, 26);
+    g.addColorStop(0, rgba(shade(tint, .25))); g.addColorStop(1, rgba(shade(tint, -.08)));
+    glow(ctx, st, c, 6);
+    ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(0, 6, 24, 20, 0, 0, TAU); ctx.fill();
+    ctx.shadowBlur = 0; ctx.strokeStyle = rimColour(c, st.P.outline); ctx.lineWidth = 3; ctx.stroke();
+    ctx.strokeStyle = ctx.fillStyle = INK; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(s * 8, 13, 4, Math.PI * 1.12, Math.PI * 1.88); ctx.stroke(); }
+    ctx.beginPath(); ctx.moveTo(-3.4, 17.5); ctx.quadraticCurveTo(0, 23, 3.4, 17.5); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+
   // The antenna bulb at (ex, ey): done star, working ripple, then the bulb with its rim and shine.
   function drawBulb(ctx, st, ex, ey, flash, ripple, bulbAlpha, rim, night) {
     const P = st.P, c = st.col, t = st.t, s = st.state;
@@ -440,7 +472,7 @@
       state: 'hidden', shown: 'working', age: 0, t: 0, blend: 1, blinkClock: 1.2, blinkFactor: 1, double: false,
       pokeAge: 9, bubbleAge: 9, streak: 0, leafOn: false, luckyUntil: 0, leaf: { x: 0, v: 0 }, doneRun: 0, rollUntil: 0, roll: { x: 0, v: 0 }, partyAge: 9, partyDay: '', holdAt: 0, hour: 12, hourAt: -1e9, lastClick: -1e9, fedUntil: 0, fed: { x: 0, v: 0 }, phewAge: 9, changeAge: 9, attend: 0, mouseAt: -1e9,
       read: { i: 0, clock: 0, x: 0, y: 0, tx: 0, ty: 0 }, glanceAge: 9, glanceIn: 6,
-      vis: { x: 0, v: 0 }, hand: { x: 0, v: 0 }, small: { x: 0, v: 0 }, compact: false,
+      vis: { x: 0, v: 0 }, hand: { x: 0, v: 0 }, small: { x: 0, v: 0 }, compact: false, pk: { x: 0, v: 0 }, peek: false, hov: { x: 0, v: 0 }, hover: null,
       look: { x: 0, y: 0 }, mouse: null, col: [79, 140, 255], colFrom: [79, 140, 255]
     };
     let raf = 0, last = 0, cw = 0, ch = 0, dpr = 1, rect = null, rectAt = 0;
@@ -461,10 +493,16 @@
     }
     // Body size in CSS pixels: the given size, or as large as the canvas allows with 'fit'.
     const drawPx = () => size === 'fit' ? Math.min(cw / 150, ch / 190) * UNITS_PER_SIZE : size;
+    const peekPx = () => opts.peekSize || drawPx();
     // Body plus room above for the antenna (14 units) and the needs-you hop (21 units at Bounce 1),
     // a little wider than the body for the raised hand.
     function bodyBox() {
       const r = canvas.getBoundingClientRect(), u = drawPx() / UNITS_PER_SIZE;
+      // Peeking: the face under the top edge, padded a little.
+      if (S.peek) {
+        const pu = peekPx() / UNITS_PER_SIZE, pad = 4, half = PEEK_RX * pu + pad, top = r.top + (opts.compactTop || 0);
+        return { x: r.left + cw / 2 - half, y: top, w: half * 2, h: PEEK_DOWN * pu + pad };
+      }
       // Compact: the stalk and bulb, padded so the pointer finds it easily.
       if (S.compact) {
         const pad = 8, half = (SMALL_R + 1) * u + pad, top = r.top + (opts.compactTop || 0);
@@ -511,7 +549,8 @@
         S.blend = 0;
         S.shown = s; S.age = 0;
       }
-      if (P.eggs && newDone) doneEggs();
+      // Coming back to the peek (another session went quiet) is not a new done moment.
+      if (P.eggs && newDone && !S.peek) doneEggs();
       if (s === 'error') S.doneRun = 0;
       S.state = s;
       if (s === 'hidden') { hideBubble(); S.leafOn = false; S.luckyUntil = 0; }
@@ -532,35 +571,40 @@
       start();
     }
     // Shrinking closes the bubble, which would otherwise float beside the empty space.
-    function setCompact(on) { S.compact = !!on; if (on) hideBubble(); start(); }
+    function setCompact(on) { S.compact = !!on; if (on) { S.peek = false; hideBubble(); } start(); }
+    // Peeking closes the bubble too; the state underneath stays, so coming back down replays nothing.
+    function setPeek(on) { S.peek = !!on; if (on) { S.compact = false; hideBubble(); } start(); }
     function lookAt(x, y) { S.mouse = { x, y }; S.mouseAt = performance.now(); }
 
     // Speech bubble: a small HTML element next to the canvas (text at canvas scale would be too small at 32 px).
-    let bubble = null, bubbleTimer = 0, bubbleOpen = false, bubbleText = '', bubbleDetail = null, bubbleUntil = 0;
+    let bubble = null, bubbleTimer = 0, bubbleOpen = false, bubbleText = '', bubbleDetail = null, bubbleUntil = 0, bubbleActs = null;
     function hideBubble() {
-      clearTimeout(bubbleTimer); bubbleOpen = false;
+      clearTimeout(bubbleTimer); bubbleOpen = false; bubbleActs = null;
       S.bubbleAge = Math.max(S.bubbleAge, BUBBLE_TIME); // the curious tilt ends with the bubble
-      if (bubble) { bubble.style.opacity = 0; bubble.style.transform = 'scale(.8)'; }
+      if (bubble) { bubble.style.opacity = 0; bubble.style.transform = 'scale(.8)'; bubble.style.pointerEvents = 'none'; }
     }
+    const sameDetail = (a, b) => JSON.stringify(a || null) === JSON.stringify(b || null);
     // announce: whether screen readers read it out (a new line yes, the same line kept open no).
-    // hold: how long the bubble stays, in ms (the fed-up line stays as long as the fed-up face).
-    // detail: a second, smaller line; left out, a bubble already showing the same line keeps its own.
-    function say(text, announce = true, hold = BUBBLE_TIME * 1000, detail) {
-      if (opts.bubble === false || S.state === 'hidden') return;
+    // hold: how long the bubble stays, in ms (the fed-up line stays as long as the fed-up face); Infinity
+    // keeps it until closed. detail: a smaller grey line, or a list of them; left out, a bubble already
+    // showing the same line keeps its own. acts: { onClose, onClick } for a bubble with an x that can be clicked.
+    function say(text, announce = true, hold = BUBBLE_TIME * 1000, detail, acts) {
+      if (opts.bubble === false || S.state === 'hidden' || S.peek) return;
       // Restart the curious tilt only when the bubble was closed, so lines while it is open do not twitch.
       if (!bubbleOpen) S.bubbleAge = 0;
       const now = performance.now();
       // Same line already showing (clicks while fed up, or 3 clicks on a spoken line): keep it open,
       // never for less time than it already had.
-      if (bubbleOpen && bubbleText === text && (detail === undefined || detail === bubbleDetail)) {
+      if (!acts && !bubbleActs && bubbleOpen && bubbleText === text && (detail === undefined || sameDetail(detail, bubbleDetail))) {
         hold = Math.max(hold, bubbleUntil - now);
-        clearTimeout(bubbleTimer); bubbleTimer = setTimeout(hideBubble, hold); bubbleUntil = now + hold; return;
+        clearTimeout(bubbleTimer); if (hold !== Infinity) bubbleTimer = setTimeout(hideBubble, hold); bubbleUntil = now + hold; return;
       }
-      bubbleOpen = true; bubbleText = text; bubbleDetail = detail || null;
+      bubbleOpen = true; bubbleText = text; bubbleDetail = detail || null; bubbleActs = acts || null;
       if (!bubble) {
         bubble = document.createElement('div');
         Object.assign(bubble.style, {
           position: 'absolute', zIndex: 1, pointerEvents: 'none', whiteSpace: 'nowrap', // just above page content, under sticky bars
+          display: 'flex', alignItems: 'flex-start', gap: '4px',
           font: '600 12px/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
           color: '#1f1d2b', background: '#fff', padding: '6px 10px', borderRadius: '12px 12px 12px 3px',
           boxShadow: '0 2px 10px rgba(0,0,0,.25)', border: '1px solid rgba(0,0,0,.1)',
@@ -569,22 +613,53 @@
         document.body.appendChild(bubble);
       }
       bubble.setAttribute('aria-live', announce ? 'polite' : 'off');
-      bubble.textContent = text;
-      if (bubbleDetail) {
+      bubble.textContent = '';
+      const words = document.createElement('div');
+      words.textContent = text;
+      for (const line of [].concat(bubbleDetail || [])) {
+        if (!line) continue;
         const small = document.createElement('div');
         Object.assign(small.style, {
           fontSize: '11px', fontWeight: 400, lineHeight: 1.25, color: '#6b6878', marginTop: '2px',
           maxWidth: '250px', overflow: 'hidden', textOverflow: 'ellipsis'
         });
-        small.textContent = bubbleDetail;
-        bubble.appendChild(small);
+        small.textContent = line;
+        words.appendChild(small);
+      }
+      bubble.appendChild(words);
+      bubble.dataset.sproutPart = 'bubble';
+      // Clickable and closable (the done flow): the x has a 22 px hit area (DECISIONS 9 Nov).
+      const click = bubbleActs && bubbleActs.onClick, close = bubbleActs && bubbleActs.onClose;
+      bubble.style.pointerEvents = bubbleActs ? 'auto' : 'none';
+      bubble.style.cursor = click ? 'pointer' : 'default';
+      bubble.style.paddingRight = close ? '4px' : '10px';
+      bubble.onclick = click ? e => { e.stopPropagation(); click(); } : null;
+      if (close) {
+        const x = document.createElement('button');
+        x.type = 'button'; x.setAttribute('aria-label', 'Close');
+        Object.assign(x.style, {
+          flex: 'none', width: '22px', height: '22px', margin: '-3px 0', padding: 0, border: 0, borderRadius: '50%',
+          background: 'transparent', color: '#6b6878', display: 'grid', placeItems: 'center', cursor: 'pointer'
+        });
+        x.innerHTML = '<svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+        x.dataset.sproutPart = 'x';
+        x.onmouseenter = () => setHover('x');
+        x.onmouseleave = () => setHover(null);
+        x.onclick = e => { e.stopPropagation(); close(); };
+        bubble.appendChild(x);
       }
       // Bottom-left corner of the bubble just above and right of the head (24, -50 in drawing units),
       // or with opts.bubbleBeside beside the body at eye level (48, 6), for a window with little room above.
       const r = canvas.getBoundingClientRect(), u = drawPx() / UNITS_PER_SIZE;
       const [bx, by] = opts.bubbleBeside ? [48, 6] : [24, -50];
-      // Right of the head when it fits in the window, otherwise mirrored to the left of it.
+      // Right of the head when it fits in the window, otherwise mirrored to the left of it. When it fits on
+      // neither side it stays on the right and wraps, so it never covers Sprout.
+      bubble.style.whiteSpace = 'nowrap'; bubble.style.maxWidth = '';
       let left = r.left + cw / 2 + bx * u;
+      const room = root.innerWidth - 8 - left, roomLeft = r.left + cw / 2 - bx * u - 8;
+      if (bubble.offsetWidth > room && bubble.offsetWidth > roomLeft) {
+        bubble.style.whiteSpace = 'normal'; bubble.style.maxWidth = Math.max(120, room) + 'px';
+      }
       const flip = left + bubble.offsetWidth > root.innerWidth - 8;
       if (flip) left = Math.max(8, r.left + cw / 2 - bx * u - bubble.offsetWidth);
       bubble.style.borderRadius = flip ? '12px 12px 3px 12px' : '12px 12px 12px 3px';
@@ -594,7 +669,34 @@
       // Only if still open by the next frame: a frame can come late (a background tab), after hideBubble.
       requestAnimationFrame(() => { if (bubbleOpen) { bubble.style.opacity = 1; bubble.style.transform = 'scale(1)'; } });
       clearTimeout(bubbleTimer);
-      bubbleTimer = setTimeout(hideBubble, hold); bubbleUntil = now + hold;
+      if (hold !== Infinity) bubbleTimer = setTimeout(hideBubble, hold);
+      bubbleUntil = now + hold;
+    }
+    // Everything a click can land on now, in client pixels: the body (or the peek), and an open bubble that
+    // takes clicks. For a host that lets clicks through everywhere else.
+    // What the pointer is over: Sprout's body or the peek grow a little and glow, the bubble tints, the x darkens.
+    function setHover(part) {
+      if (part === S.hover) return;
+      S.hover = part; start();
+      if (!bubble) return;
+      bubble.style.background = part === 'bubble' && bubbleActs && bubbleActs.onClick ? '#eef2ff' : '#fff';
+      const x = bubble.querySelector('button');
+      if (x) { x.style.background = part === 'x' ? 'rgba(0,0,0,.08)' : 'transparent'; x.style.color = part === 'x' ? '#1f1d2b' : '#6b6878'; }
+    }
+    function partAt(x, y) {
+      const el = document.elementFromPoint(x, y), part = el && el.closest('[data-sprout-part]');
+      if (part && bubbleOpen) return part.dataset.sproutPart;
+      const b = bodyBox();
+      return S.state !== 'hidden' && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h ? 'body' : null;
+    }
+    function hitBoxes() {
+      const boxes = [];
+      if (S.state !== 'hidden') boxes.push(bodyBox());
+      if (bubbleOpen && bubbleActs && bubble) {
+        const b = bubble.getBoundingClientRect();
+        boxes.push({ x: b.left, y: b.top, w: b.width, h: b.height });
+      }
+      return boxes;
     }
     const onMove = e => lookAt(e.clientX, e.clientY);
     // Pointer on Sprout: a press shorter than the hold time is a click (poke on release); holding long enough
@@ -612,6 +714,8 @@
       // Small and settled: 20 frames a second is plenty for a bulb that pulses every 5 s.
       // (50 ms is the longest step dt allows, so the pulse keeps its time.)
       if (S.compact && S.small.x > .99 && Math.abs(S.small.v) < .01 && now - last < 50) { raf = requestAnimationFrame(frame); return; }
+      // Peeking and settled: the same 20 frames a second, since the peek can stay for hours.
+      if (S.peek && S.pk.x > .99 && Math.abs(S.pk.v) < .01 && now - last < 50) { raf = requestAnimationFrame(frame); return; }
       const dt = Math.min(.05, (now - last) / 1000); last = now;
       // Moving to a screen with another pixel density changes the ratio without any resize.
       if (Math.min(root.devicePixelRatio || 1, 3) !== dpr) resize();
@@ -634,6 +738,8 @@
       const w = 4 / P.trans, k = w * w, hidden = S.state === 'hidden';
       spring(S.vis, hidden ? 0 : 1, dt, k, hidden ? .9 : .5);
       spring(S.small, S.compact && !hidden ? 1 : 0, dt, k, .8);
+      spring(S.pk, S.peek && !hidden ? 1 : 0, dt, k, .8);
+      spring(S.hov, S.hover === 'body' && !hidden ? 1 : 0, dt, 300, .6);
       const np = needsPhase(S.age);
       spring(S.hand, !hidden && S.shown === 'needs' && P.mHand && np.handUp && S.fed.x < .5 ? 1 : 0, dt, k, .4);
       S.blend = Math.min(1, S.blend + dt / P.trans);
@@ -680,7 +786,9 @@
         // (a plain fade with Reduce Motion).
         const alpha = reduce ? clamp(v, 0, 1) : clamp(v * 2, 0, 1), slide = reduce ? 0 : (1 - v) * -120;
         const st = {
-          state: S.shown, t: S.t, age: S.age - lead, raw: S.age, col: S.col, P, blink, k: kpx,
+          // Hovered: a brighter glow with the small grow.
+          state: S.shown, t: S.t, age: S.age - lead, raw: S.age, col: S.col, blink, k: kpx,
+          P: S.hov.x > .01 ? { ...P, glow: Math.min(1, P.glow + .4 * S.hov.x) } : P,
           read: R, glance: glanceOffset(S.glanceAge), hand: S.hand.x, look: S.look,
           changeAge: S.changeAge, pokeAge: S.pokeAge, bubbleAge: S.bubbleAge, fed: S.fed.x, phewAge: S.phewAge, leaf: S.leaf.x, roll: S.roll.x, night: P.eggs && S.shown === 'working' && S.hour < 5, attend: S.attend, reduce, alpha, np
         };
@@ -688,18 +796,20 @@
         ctx.setTransform(kpx, 0, 0, kpx, cw * dpr / 2, cy * dpr);
         // Compact: the body shrinks up into the bulb and fades; the bulb hangs where the stalk starts.
         const sm = clamp(S.small.x, 0, 1), bulbY = ((opts.compactTop || 0) - cy) / scale + STALK + SMALL_R;
-        ctx.save(); ctx.translate(m.x * (1 - sm), lerp(m.y, bulbY, sm) + slide); ctx.rotate(m.rot * (1 - sm));
-        ctx.globalAlpha = alpha * clamp(1 - sm * 1.4, 0, 1); ctx.scale(1 - .8 * sm, 1 - .8 * sm);
+        // Peek: the body rises out of the top edge and fades, the peek comes down in its place.
+        const pk = clamp(S.pk.x, 0, 1), hangY = ((opts.compactTop || 0) - cy) / scale, rise = reduce ? 0 : pk * -120;
+        ctx.save(); ctx.translate(m.x * (1 - sm), lerp(m.y, bulbY, sm) + slide + rise); ctx.rotate(m.rot * (1 - sm));
+        ctx.globalAlpha = alpha * clamp(1 - sm * 1.4, 0, 1) * clamp(1 - pk * 1.4, 0, 1); ctx.scale(1 - .8 * sm, 1 - .8 * sm);
         // Same size in every state; needs you starts with a short grow-and-settle pop.
         const pop = S.shown === 'needs' && S.age < .45 ? 1 + (reduce ? .04 : .12) * Math.sin(S.age / .45 * Math.PI) : 1;
-        const s = (reduce ? 1 : .75 + .25 * v) * pop; ctx.scale(s, s);
+        const s = (reduce ? 1 : .75 + .25 * v) * pop * (1 + .06 * S.hov.x); ctx.scale(s, s);
         if (P.backing > 0) {
           const pad = 9;
           ctx.fillStyle = `rgba(14,15,20,${P.backing})`;
           rrect(ctx, -BOX.rx - pad, BOX.cy - BOX.ry - pad, (BOX.rx + pad) * 2, (BOX.ry + pad) * 2, Math.min(BOX.rx, BOX.ry) * .6 + pad);
           ctx.fill();
         }
-        if (sm < .99) { ctx.save(); drawSprout(ctx, st, m); ctx.restore(); }
+        if (sm < .99 && pk < .99) { ctx.save(); drawSprout(ctx, st, m); ctx.restore(); }
         if (S.pokeAge < .6 && (S.shown === 'done' || S.shown === 'needs')) {
           const p = S.pokeAge / .6, c = st.col;
           ctx.fillStyle = rgba(shade(c, .6)); glow(ctx, st, c, 5);
@@ -711,6 +821,14 @@
         ctx.restore();
         // Drawn as working whatever the state, so growing back into done shows no star on the bulb.
         if (sm > .01) drawSmall(ctx, { ...st, state: 'working', alpha: alpha * sm }, bulbY + slide);
+        if (pk > .01) {
+          // Drawn at peekSize: the peek was judged at a 32 px body in the sketch.
+          const ps = peekPx() / drawPx();
+          const grow = ps * (1 + .1 * S.hov.x);
+          ctx.save(); ctx.translate(0, hangY + (reduce ? 0 : (1 - pk) * -PEEK_DOWN)); ctx.scale(grow, grow);
+          drawPeek(ctx, { ...st, alpha: alpha * clamp(pk * 1.4 - .4, 0, 1) });
+          ctx.restore();
+        }
         // Birthday confetti, drawn outside the character's tilt and squash: pieces fall from above the head and fade out (left out with Reduce Motion).
         if (P.eggs && S.partyAge < EGGS.PARTY_MS / 1000 && !reduce) {
           const pa = S.partyAge;
@@ -735,11 +853,12 @@
     if (opts.handlePress !== false) for (const ev in POINTER) canvas.addEventListener(ev, POINTER[ev]);
 
     return {
-      setState, setCompact, poke, press, release, cancel, lookAt, say, bodyBox,
+      setState, setCompact, setPeek, poke, press, release, cancel, lookAt, say, bodyBox, hitBoxes, setHover, partAt,
       // Changes only the settings given; the rest keep their current values.
       update(settings) { P = merge(P, settings); start(); },
       get state() { return S.state; },
       get compact() { return S.compact; },
+      get peek() { return S.peek; },
       get line() { return lines[S.shown]; },
       get running() { return raf !== 0; },
       destroy() {
