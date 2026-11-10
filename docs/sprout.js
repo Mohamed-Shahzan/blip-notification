@@ -661,7 +661,7 @@
       // or with opts.bubbleBeside beside the body at eye level (48, 6), for a window with little room above.
       const r = canvas.getBoundingClientRect(), u = drawPx() / UNITS_PER_SIZE;
       const [bx, by] = opts.bubbleBeside ? [48, 6] : [24, -50];
-      // EDGE: the gap the bubble keeps from the window's sides and top.
+      // EDGE: the gap the bubble keeps from the window's sides and the page's top.
       const EDGE = 8;
       // Right of the head when it fits in the window, otherwise mirrored to the left of it. When it fits on
       // neither side it stays on the right and wraps, so it never covers Sprout.
