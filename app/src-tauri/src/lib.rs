@@ -301,15 +301,16 @@ fn update_state(app: &AppHandle, event: Option<state::Event>) {
     }
 }
 
-// Sleeps until "Done" is due to show or hide, the next process check while
-// sessions are open, or the next look at the front app while a finish is not
-// checked yet. With nothing to do, it sleeps until an event.
+// Sleeps until "Done" is due to show or hide, a session's app is due another
+// lookup, the next process check while sessions are open, or the next look at
+// the front app while a finish is not checked yet. With nothing to do, it sleeps until an event.
 fn watch_state(app: AppHandle) {
     let mut checked = now();
     loop {
-        let (due, open) = {
+        let (due, retry, open) = {
             let machine = machine(&app);
-            (machine.next_change(now()), !machine.is_empty())
+            let retry = machine.next_app_retry();
+            (machine.next_change(now()), retry, !machine.is_empty())
         };
         let check = open.then_some(checked + ALIVE_CHECK);
         let look = NEEDS_PRESENCE
@@ -317,6 +318,7 @@ fn watch_state(app: AppHandle) {
             .then(|| now() + PRESENCE_POLL);
         match due
             .into_iter()
+            .chain(retry)
             .chain(check)
             .chain(look)
             .min_by(f64::total_cmp)

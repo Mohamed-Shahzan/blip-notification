@@ -582,6 +582,16 @@ impl Machine {
             .collect()
     }
 
+    // When the next lookup for a session without its app is due, so the timer
+    // wakes for it instead of waiting for the next process check (code review 10 Nov).
+    pub fn next_app_retry(&self) -> Option<f64> {
+        self.sessions
+            .values()
+            .filter(|s| s.app.is_none() && s.pid.is_some())
+            .filter_map(|s| s.app_tried.map(|at| at + APP_RETRY))
+            .min_by(f64::total_cmp)
+    }
+
     pub fn set_app(&mut self, session: &str, app: App) {
         if let Some(s) = self.sessions.get_mut(session) {
             s.app = Some(app);
@@ -931,9 +941,11 @@ mod tests {
         feed_sent(&mut m, hook("UserPromptSubmit", "s", "p"), 42, 0.0, 0.0);
         assert_eq!(m.apps_wanted(0.0), vec![("s".to_string(), 42)]);
         assert_eq!(m.apps_wanted(1.0), vec![]); // just tried
+        assert_eq!(m.next_app_retry(), Some(APP_RETRY)); // the timer wakes for it
         assert_eq!(m.apps_wanted(APP_RETRY), vec![("s".to_string(), 42)]);
         m.set_app("s", claude());
         assert_eq!(m.apps_wanted(100.0), vec![]); // found: done
+        assert_eq!(m.next_app_retry(), None);
     }
 
     fn state_after(m: &mut Machine, now: f64) -> State {
