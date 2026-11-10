@@ -661,23 +661,25 @@
       // or with opts.bubbleBeside beside the body at eye level (48, 6), for a window with little room above.
       const r = canvas.getBoundingClientRect(), u = drawPx() / UNITS_PER_SIZE;
       const [bx, by] = opts.bubbleBeside ? [48, 6] : [24, -50];
+      // EDGE: the gap the bubble keeps from the window's sides and top.
+      const EDGE = 8;
       // Right of the head when it fits in the window, otherwise mirrored to the left of it. When it fits on
       // neither side it stays on the right and wraps, so it never covers Sprout.
       bubble.style.whiteSpace = 'nowrap'; bubble.style.maxWidth = '';
       let left = r.left + cw / 2 + bx * u;
-      const room = root.innerWidth - 8 - left, roomLeft = r.left + cw / 2 - bx * u - 8;
+      const room = root.innerWidth - EDGE - left, roomLeft = r.left + cw / 2 - bx * u - EDGE;
       if (bubble.offsetWidth > room && bubble.offsetWidth > roomLeft) {
         bubble.style.whiteSpace = 'normal'; bubble.style.maxWidth = Math.max(120, room) + 'px';
       }
-      const flip = left + bubble.offsetWidth > root.innerWidth - 8;
-      if (flip) left = Math.max(8, r.left + cw / 2 - bx * u - bubble.offsetWidth);
+      const flip = left + bubble.offsetWidth > root.innerWidth - EDGE;
+      if (flip) left = Math.max(EDGE, r.left + cw / 2 - bx * u - bubble.offsetWidth);
       bubble.style.borderRadius = flip ? '12px 12px 3px 12px' : '12px 12px 12px 3px';
       bubble.style.transformOrigin = flip ? 'right bottom' : 'left bottom';
       bubble.style.left = (left + root.scrollX) + 'px';
       // Never above the page's top: a tall bubble (Done with three grey lines) grows down instead of
       // into the menu bar (Mohamed's test, 10 Nov).
       const top = r.top + root.scrollY + ch * .6 + by * u - bubble.offsetHeight;
-      bubble.style.top = Math.max(6, top) + 'px';
+      bubble.style.top = Math.max(EDGE, top) + 'px';
       // Only if still open by the next frame: a frame can come late (a background tab), after hideBubble.
       requestAnimationFrame(() => { if (bubbleOpen) { bubble.style.opacity = 1; bubble.style.transform = 'scale(1)'; } });
       clearTimeout(bubbleTimer);
