@@ -95,6 +95,8 @@ enum End {
 
 pub fn translate(src: &str, msg: &Value) -> Option<Event> {
     let text = |key: &str| msg.get(key).and_then(Value::as_str);
+    // A session id; an empty one is no session (it could never be ended).
+    let id = |key: &str| text(key).filter(|s| !s.is_empty()).map(str::to_string);
     match src {
         "hook" => {
             let tool = text("tool_name").unwrap_or_default();
@@ -131,7 +133,7 @@ pub fn translate(src: &str, msg: &Value) -> Option<Event> {
                 _ => None,
             };
             Some(Event {
-                session: text("session_id")?.to_string(),
+                session: id("session_id")?,
                 prompt: text("prompt_id").map(str::to_string),
                 agent,
                 sent: None,
@@ -156,7 +158,7 @@ pub fn translate(src: &str, msg: &Value) -> Option<Event> {
                 _ => End::Answer, // answer or refusal
             };
             Some(Event {
-                session: text("session")?.to_string(),
+                session: id("session")?,
                 prompt: None,
                 agent: None,
                 sent: msg.get("ts").and_then(Value::as_f64),
@@ -1302,6 +1304,17 @@ mod tests {
             translate("hook", &json!({ "hook_event_name": "Stop" })),
             None
         ); // no session
+        assert_eq!(
+            translate(
+                "hook",
+                &json!({ "hook_event_name": "Stop", "session_id": "" })
+            ),
+            None
+        ); // empty session
+        assert_eq!(
+            translate("mod", &json!({ "kind": "turn.complete", "session": "" })),
+            None
+        );
         assert_eq!(translate("mod", &json!({ "kind": "locktest" })), None);
         assert_eq!(translate("other", &json!({})), None);
     }
