@@ -518,9 +518,11 @@
     let eggTimer = 0;
     function sayLater(text) {
       clearTimeout(eggTimer);
-      // The egg takes over the done line but keeps its detail and stays at least as long.
+      // The egg takes over the done line but keeps its detail and stays at least as long. Not over a bubble
+      // with an x or a click (Blip's done flow): redrawn without them it could no longer be closed (edge
+      // test, 10 Nov). The stars still circle.
       eggTimer = setTimeout(() => {
-        if (S.state === 'done') say(text, true, Math.max(BUBBLE_TIME * 1000, bubbleUntil - performance.now()), bubbleOpen ? bubbleDetail : null);
+        if (S.state === 'done' && !(bubbleOpen && bubbleActs)) say(text, true, Math.max(BUBBLE_TIME * 1000, bubbleUntil - performance.now()), bubbleOpen ? bubbleDetail : null);
       }, 400);
     }
     // A done moment: birthday confetti once a day, every ROLL_EVERY in a row stars, sometimes a lucky leaf.
