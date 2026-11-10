@@ -64,6 +64,8 @@ let spoke = { state: "", text: null, at: -Infinity };
 let last = { state: "hidden" };
 // How long "Message text on/off" shows after a right-click.
 const TOGGLE_FOR = 1500;
+// Brings a quiet or recall bubble back after that line; a new right-click restarts it.
+let toggleTimer = 0;
 let lastText = null;
 
 // The message snippet under the line (PRD Level 1). Right-click Sprout hides or
@@ -89,7 +91,8 @@ canvas.addEventListener("contextmenu", (e) => {
   else if (last.state === "done" || last.recall) {
     const was = last;
     sprout.say(showText ? "Message text on" : "Message text off", true, TOGGLE_FOR, null);
-    setTimeout(() => {
+    clearTimeout(toggleTimer);
+    toggleTimer = setTimeout(() => {
       if (last !== was) return;
       doneBubble(last, true);
       sendBox(); // the x is back: its hit box too
