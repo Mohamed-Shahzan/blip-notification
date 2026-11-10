@@ -13,8 +13,11 @@ pub const DONE_FOR: f64 = 5.0;
 // The session's app in front, with the user active, this long counts as checked.
 const CHECK_AFTER: f64 = 2.0;
 // A session whose app was not found (a failed ps, a process tree with no app)
-// is looked up again after this many seconds, while Blip is awake anyway.
+// is looked up again after this many seconds, three times longer after each
+// miss, at most APP_RETRY_MAX apart (code review 10 Nov: ssh or tmux sessions
+// have no app, and were looked up every 10 s for their whole life).
 const APP_RETRY: f64 = 10.0;
+const APP_RETRY_MAX: f64 = 300.0;
 // The project line is cut to this many characters.
 const PROJECT_MAX: usize = 40;
 // "Done" waits this long first: in the CLI, Esc sends Stop and the mod's "aborted"
@@ -259,9 +262,9 @@ struct Session {
     cwd: Option<String>,
     title: Option<String>,
     app: Option<App>,
-    // When the app was last looked up without finding it, so it is tried again
-    // only after APP_RETRY.
-    app_tried: Option<f64>,
+    // When the app may be looked up again after a miss, and how many misses so far.
+    app_next: Option<f64>,
+    app_misses: i32,
     // A finish the user has not checked yet.
     finished: Option<Finished>,
 }
@@ -467,8 +470,7 @@ impl Machine {
             .filter_map(|s| s.finished.as_ref())
             .flat_map(|f| {
                 let hide = (f.quiet != Some(false)).then_some(f.at + SETTLE + DONE_FOR);
-                let wait = (self.reads_presence && f.quiet.is_none())
-                    .then_some(f.at + SETTLE + PRESENCE_WAIT);
+                let wait = (f.waits && f.quiet.is_none()).then_some(f.at + SETTLE + PRESENCE_WAIT);
                 [Some(f.at + SETTLE), wait, hide]
             })
             .flatten()
@@ -496,14 +498,13 @@ impl Machine {
     fn tick(&mut self, now: f64) {
         let presence = self.presence;
         let read_at = self.read_at;
-        let waits = self.reads_presence;
         let checked = presence
             .filter(|p| p.active && now - self.presence_since >= CHECK_AFTER)
             .and_then(|p| p.front);
         for s in self.sessions.values_mut() {
             let app = s.app.as_ref().map(|a| a.pid);
             let Some(f) = &mut s.finished else { continue };
-            let fresh = !waits || read_at.is_some_and(|at| at >= f.at);
+            let fresh = !f.waits || read_at.is_some_and(|at| at >= f.at);
             if f.quiet.is_none()
                 && now >= f.at + SETTLE
                 && (fresh || now >= f.at + SETTLE + PRESENCE_WAIT)
@@ -568,15 +569,17 @@ impl Machine {
         }
     }
 
-    // Sessions with a Claude process and no app yet, not tried in the last
-    // APP_RETRY. Marked as tried; set_app ends the tries.
+    // Sessions with a Claude process and no app yet, due a lookup. Each is
+    // counted as a miss until set_app ends the tries.
     pub fn apps_wanted(&mut self, now: f64) -> Vec<(String, u32)> {
         self.sessions
             .iter_mut()
-            .filter(|(_, s)| s.app.is_none() && s.app_tried.is_none_or(|at| now - at >= APP_RETRY))
+            .filter(|(_, s)| s.app.is_none() && s.app_next.is_none_or(|at| now >= at))
             .filter_map(|(id, s)| {
                 let pid = s.pid?;
-                s.app_tried = Some(now);
+                let wait = APP_RETRY * 3f64.powi(s.app_misses);
+                s.app_next = Some(now + wait.min(APP_RETRY_MAX));
+                s.app_misses += 1;
                 Some((id.clone(), pid))
             })
             .collect()
@@ -588,7 +591,7 @@ impl Machine {
         self.sessions
             .values()
             .filter(|s| s.app.is_none() && s.pid.is_some())
-            .filter_map(|s| s.app_tried.map(|at| at + APP_RETRY))
+            .filter_map(|s| s.app_next)
             .min_by(f64::total_cmp)
     }
 
@@ -943,6 +946,15 @@ mod tests {
         assert_eq!(m.apps_wanted(1.0), vec![]); // just tried
         assert_eq!(m.next_app_retry(), Some(APP_RETRY)); // the timer wakes for it
         assert_eq!(m.apps_wanted(APP_RETRY), vec![("s".to_string(), 42)]);
+        // Each miss waits three times longer, at most APP_RETRY_MAX.
+        assert_eq!(m.next_app_retry(), Some(APP_RETRY + 3.0 * APP_RETRY));
+        for _ in 0..6 {
+            let at = m.next_app_retry().unwrap();
+            assert_eq!(m.apps_wanted(at).len(), 1);
+        }
+        let at = m.next_app_retry().unwrap();
+        assert_eq!(m.apps_wanted(at), vec![("s".to_string(), 42)]);
+        assert_eq!(m.next_app_retry(), Some(at + APP_RETRY_MAX));
         m.set_app("s", claude());
         assert_eq!(m.apps_wanted(100.0), vec![]); // found: done
         assert_eq!(m.next_app_retry(), None);
@@ -1005,6 +1017,25 @@ mod tests {
         m.set_presence(here(CLAUDE, true), 10.4);
         let shown = m.changed(10.4).unwrap();
         assert_eq!((shown.state, shown.quiet), (State::Done, true));
+    }
+
+    // Code review 10 Nov: a second finish waiting for its reading shows Working,
+    // which the first Done's bubble was already behind while that session worked.
+    #[test]
+    fn a_second_finish_while_a_done_shows() {
+        let mut m = Machine::default();
+        m.set_reads_presence(true);
+        feed(&mut m, "hook", hook("UserPromptSubmit", "a", "p"), 0.0);
+        feed(&mut m, "hook", hook("Stop", "a", "p"), 1.0);
+        m.set_presence(here(NOTES, true), 1.1);
+        assert_eq!(state_after(&mut m, 1.3), State::Done);
+        feed(&mut m, "hook", hook("UserPromptSubmit", "b", "p"), 2.0);
+        assert_eq!(state_after(&mut m, 2.0), State::Working); // b works: a waits behind
+        feed(&mut m, "hook", hook("Stop", "b", "p"), 10.0);
+        assert_eq!(state_after(&mut m, 10.3), State::Working); // still, until b's reading
+        m.set_presence(here(NOTES, true), 10.4);
+        let shown = m.changed(10.4).unwrap();
+        assert_eq!((shown.state, shown.more), (State::Done, 1));
     }
 
     #[test]
