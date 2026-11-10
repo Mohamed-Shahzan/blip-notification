@@ -676,9 +676,9 @@
       bubble.style.left = (left + root.scrollX) + 'px';
       // Never above the page's top: a tall bubble (Done with three grey lines) grows down instead of
       // into the menu bar (Mohamed's test, 10 Nov). Its pointed corner then goes to the top when that is
-      // nearer Sprout's eye than the bottom (code review, 10 Nov).
+      // nearer Sprout's eye than the bottom, that is, the eye is in its upper half (code review, 10 Nov).
       const anchor = r.top + root.scrollY + ch * .6 + by * u, h = bubble.offsetHeight;
-      const top = Math.max(EDGE, anchor - h), up = anchor - top < top + h - anchor;
+      const top = Math.max(EDGE, anchor - h), up = anchor < top + h / 2;
       bubble.style.top = top + 'px';
       bubble.style.borderRadius = up ? (flip ? '12px 3px 12px 12px' : '3px 12px 12px 12px')
         : (flip ? '12px 12px 3px 12px' : '12px 12px 12px 3px');
