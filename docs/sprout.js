@@ -459,6 +459,11 @@
 
   // Canvas size in CSS pixels with room for hops (up to Bounce 2), antenna, raised hand, poke burst and glow
   // around a body of `size` px. The character is centred at 60% of the height.
+  // A press of the main button that is not a right-click. On a Mac, Control-click is the
+  // right-click: the main button with Control held (code review 10 Nov, it opened the session).
+  const IS_MAC = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent);
+  function isMainPress(e) { return e.button === 0 && !(IS_MAC && e.ctrlKey); }
+
   function canvasSize(size) {
     const k = size / UNITS_PER_SIZE;
     return { width: Math.ceil(150 * k), height: Math.ceil(190 * k) };
@@ -640,7 +645,7 @@
       // its own click. Text is not selectable, so a press never starts a selection instead.
       bubble.style.userSelect = bubble.style.webkitUserSelect = click ? 'none' : '';
       bubble.onpointerdown = click ? e => {
-        if (e.button !== 0 || e.target.closest('button')) return;
+        if (!isMainPress(e) || e.target.closest('button')) return;
         e.stopPropagation(); click();
       } : null;
       if (close) {
@@ -866,7 +871,7 @@
     if (ro) ro.observe(canvas);
     if (opts.pointer !== false) root.addEventListener('pointermove', onMove);
     // Only the main button counts: a right-click opens its menu and leaves Sprout alone.
-    const POINTER = { pointerdown: e => { if (e.button === 0) press(); }, pointerup: e => { if (e.button === 0) release(); }, pointerleave: cancel, pointercancel: cancel };
+    const POINTER = { pointerdown: e => { if (isMainPress(e)) press(); }, pointerup: e => { if (isMainPress(e)) release(); }, pointerleave: cancel, pointercancel: cancel };
     if (opts.handlePress !== false) for (const ev in POINTER) canvas.addEventListener(ev, POINTER[ev]);
 
     return {
@@ -888,5 +893,5 @@
     };
   }
 
-  root.BlipSprout = { create, canvasSize, DEFAULTS, STATES, withDefaults: s => merge(DEFAULTS, s) };
+  root.BlipSprout = { create, canvasSize, isMainPress, DEFAULTS, STATES, withDefaults: s => merge(DEFAULTS, s) };
 })(typeof window !== 'undefined' ? window : globalThis);

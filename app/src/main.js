@@ -45,7 +45,7 @@ function click(what) {
 }
 canvas.style.cursor = "pointer";
 canvas.addEventListener("pointerdown", (e) => {
-  if (e.button === 0) click(sprout.peek ? "peek" : "sprout");
+  if (BlipSprout.isMainPress(e)) click(sprout.peek ? "peek" : "sprout");
 });
 const ACTS = { onClick: () => click("sprout"), onClose: () => click("x") };
 
