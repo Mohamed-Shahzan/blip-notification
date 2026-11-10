@@ -78,6 +78,8 @@ try {
 // On Sprout or its bubble (the window takes clicks only there): code review 10 Nov.
 document.addEventListener("contextmenu", (e) => {
   e.preventDefault();
+  // While peeking Sprout cannot say what changed, so nothing changes (code review 10 Nov).
+  if (sprout.peek) return;
   showText = !showText;
   try {
     localStorage.setItem(SHOW_TEXT, showText ? "on" : "off");

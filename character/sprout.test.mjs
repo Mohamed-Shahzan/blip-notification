@@ -27,3 +27,10 @@ test("on Windows Control-click stays a main press", () => {
   assert.equal(isMainPress({ button: 0, ctrlKey: true }), true);
   assert.equal(isMainPress({ button: 2, ctrlKey: false }), false);
 });
+
+// The website loads docs/sprout.js, a copy of this one: a missed copy would
+// leave it on old code (code review 10 Nov).
+test("the website's copy matches", () => {
+  const copy = readFileSync(new URL("../docs/sprout.js", import.meta.url), "utf8");
+  assert.equal(copy, code, "copy character/sprout.js to docs/sprout.js");
+});
