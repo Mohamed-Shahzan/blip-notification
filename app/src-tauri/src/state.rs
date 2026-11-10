@@ -1095,24 +1095,21 @@ mod tests {
 
     #[test]
     fn the_project_line() {
-        let home = Some("/Users/mac");
+        let home = Some("/Users/someone");
         let line = |cwd, title| project_line(cwd, title, home);
         assert_eq!(
-            line("/Users/mac/Documents/Claude/blip-notification", None),
+            line("/Users/someone/code/blip-notification", None),
             "blip-notification"
         );
         assert_eq!(
-            line(
-                "/Users/mac/Documents/Claude/blip-notification",
-                Some("Done flow")
-            ),
+            line("/Users/someone/code/blip-notification", Some("Done flow")),
             "blip-notification · Done flow"
         );
         assert_eq!(
-            line("/Users/mac/code/app/.claude/worktrees/brave-fox", None),
+            line("/Users/someone/code/app/.claude/worktrees/brave-fox", None),
             "app"
         );
-        assert_eq!(line("/Users/mac/", None), "~");
+        assert_eq!(line("/Users/someone/", None), "~");
         assert_eq!(line("C:\\Users\\mo\\Projects\\blip\\", None), "blip");
         assert_eq!(
             project_line("C:\\Users\\mo", None, Some("C:\\Users\\mo")),
@@ -1131,10 +1128,10 @@ mod tests {
     fn the_project_comes_from_the_first_folder_and_the_latest_title() {
         let mut m = Machine::default();
         let mut first = hook("UserPromptSubmit", "s", "p");
-        first["cwd"] = json!("/Users/mac/blip");
+        first["cwd"] = json!("/Users/someone/blip");
         feed(&mut m, "hook", first, 0.0);
         let mut later = hook("PreToolUse", "s", "p");
-        later["cwd"] = json!("/Users/mac/blip/app");
+        later["cwd"] = json!("/Users/someone/blip/app");
         feed(&mut m, "hook", later, 1.0);
         let mut next = hook("UserPromptSubmit", "s", "p2");
         next["session_title"] = json!("Done flow");
