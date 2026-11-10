@@ -673,13 +673,16 @@
       }
       const flip = left + bubble.offsetWidth > root.innerWidth - EDGE;
       if (flip) left = Math.max(EDGE, r.left + cw / 2 - bx * u - bubble.offsetWidth);
-      bubble.style.borderRadius = flip ? '12px 12px 3px 12px' : '12px 12px 12px 3px';
-      bubble.style.transformOrigin = flip ? 'right bottom' : 'left bottom';
       bubble.style.left = (left + root.scrollX) + 'px';
       // Never above the page's top: a tall bubble (Done with three grey lines) grows down instead of
-      // into the menu bar (Mohamed's test, 10 Nov).
-      const top = r.top + root.scrollY + ch * .6 + by * u - bubble.offsetHeight;
-      bubble.style.top = Math.max(EDGE, top) + 'px';
+      // into the menu bar (Mohamed's test, 10 Nov). Its pointed corner then goes to the top when that is
+      // nearer Sprout's eye than the bottom (code review, 10 Nov).
+      const anchor = r.top + root.scrollY + ch * .6 + by * u, h = bubble.offsetHeight;
+      const top = Math.max(EDGE, anchor - h), up = anchor - top < top + h - anchor;
+      bubble.style.top = top + 'px';
+      bubble.style.borderRadius = up ? (flip ? '12px 3px 12px 12px' : '3px 12px 12px 12px')
+        : (flip ? '12px 12px 3px 12px' : '12px 12px 12px 3px');
+      bubble.style.transformOrigin = (flip ? 'right ' : 'left ') + (up ? 'top' : 'bottom');
       // Only if still open by the next frame: a frame can come late (a background tab), after hideBubble.
       requestAnimationFrame(() => { if (bubbleOpen) { bubble.style.opacity = 1; bubble.style.transform = 'scale(1)'; } });
       clearTimeout(bubbleTimer);
