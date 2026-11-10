@@ -20,6 +20,11 @@ const PROJECT_MAX: usize = 40;
 // "Done" waits this long first: in the CLI, Esc sends Stop and the mod's "aborted"
 // follows up to one inbox poll (100 ms) later. Until then Blip keeps showing Working.
 const SETTLE: f64 = 0.2;
+// The quiet decision waits for a reading of what the user is doing taken after
+// the finish (code review 10 Nov), at most this long after SETTLE. Without one
+// (a failed read) it is the full flow. Only where presence can be read
+// (Machine::reads_presence; the Mac for now): elsewhere it decides at SETTLE.
+const PRESENCE_WAIT: f64 = 1.0;
 
 // Claude Code's own bookkeeping tools, not work the user cares about.
 const IGNORED_TOOLS: [&str; 2] = ["mcp__ccd_turn__wrap_up", "mcp__ccd_turn__update_plan"];
@@ -191,6 +196,10 @@ pub struct Machine {
     presence: Option<Presence>,
     // Since when the presence above has been the same.
     presence_since: f64,
+    // When the latest reading was taken, also one that changed nothing.
+    read_at: Option<f64>,
+    // This platform reads presence, so the quiet decision waits for a reading.
+    reads_presence: bool,
     // The peek was clicked: Sprout is down with "All done, <time>".
     recall: bool,
     // The user's home folder, shown as "~" in the project line.
@@ -264,6 +273,8 @@ struct Finished {
     quiet: Option<bool>,
     // The bubble is open (until the x); closed, Sprout peeks.
     bubble: bool,
+    // Until quiet is decided, Sprout keeps Working (Machine::reads_presence).
+    waits: bool,
 }
 
 #[derive(Clone, Copy, Default, PartialEq)]
@@ -286,6 +297,7 @@ impl Machine {
             self.end(&event.session);
             return;
         }
+        let waits = self.reads_presence;
         let s = self.sessions.entry(event.session).or_default();
         if event.pid.is_some() {
             s.pid = event.pid;
@@ -391,6 +403,7 @@ impl Machine {
                         at: now,
                         quiet: None,
                         bubble: true,
+                        waits,
                     });
                 }
                 s.asks.clear();
@@ -454,7 +467,9 @@ impl Machine {
             .filter_map(|s| s.finished.as_ref())
             .flat_map(|f| {
                 let hide = (f.quiet != Some(false)).then_some(f.at + SETTLE + DONE_FOR);
-                [Some(f.at + SETTLE), hide]
+                let wait = (self.reads_presence && f.quiet.is_none())
+                    .then_some(f.at + SETTLE + PRESENCE_WAIT);
+                [Some(f.at + SETTLE), wait, hide]
             })
             .flatten()
             .filter(|&t| t > now)
@@ -473,19 +488,26 @@ impl Machine {
             self.presence = presence;
             self.presence_since = now;
         }
+        self.read_at = Some(now);
     }
 
     // Applies the rules that depend on time and presence: the quiet decision at
     // SETTLE, the quiet Done ending, and checking by having the app in front.
     fn tick(&mut self, now: f64) {
         let presence = self.presence;
+        let read_at = self.read_at;
+        let waits = self.reads_presence;
         let checked = presence
             .filter(|p| p.active && now - self.presence_since >= CHECK_AFTER)
             .and_then(|p| p.front);
         for s in self.sessions.values_mut() {
             let app = s.app.as_ref().map(|a| a.pid);
             let Some(f) = &mut s.finished else { continue };
-            if f.quiet.is_none() && now >= f.at + SETTLE {
+            let fresh = !waits || read_at.is_some_and(|at| at >= f.at);
+            if f.quiet.is_none()
+                && now >= f.at + SETTLE
+                && (fresh || now >= f.at + SETTLE + PRESENCE_WAIT)
+            {
                 let in_front =
                     presence.is_some_and(|p| p.active && p.front.is_some() && p.front == app);
                 f.quiet = Some(in_front);
@@ -566,6 +588,11 @@ impl Machine {
         }
     }
 
+    // Set once at start where Blip can read what the user is doing.
+    pub fn set_reads_presence(&mut self, reads: bool) {
+        self.reads_presence = reads;
+    }
+
     pub fn set_home(&mut self, home: Option<String>) {
         self.home = home;
     }
@@ -643,6 +670,8 @@ impl Session {
         let since = now - f.at;
         match f.quiet {
             _ if since < SETTLE => State::Working,
+            // Not decided yet: waiting for a reading of what the user is doing.
+            None if f.waits => State::Working,
             Some(true) if since < SETTLE + DONE_FOR => State::Done,
             Some(true) => State::Hidden,
             _ if f.bubble => State::Done,
@@ -949,6 +978,31 @@ mod tests {
         m.set_presence(here(CLAUDE, false), 10.0); // idle or locked
         assert_eq!(state_after(&mut m, 60.0), State::Done);
         assert!(!m.changed(60.0).is_some_and(|s| s.quiet));
+    }
+
+    // Code review 10 Nov: the quiet decision waited for nothing, so a reading
+    // not taken yet made a Done in the user's own app the full flow.
+    #[test]
+    fn the_quiet_decision_waits_for_a_reading_after_the_finish() {
+        let mut m = Machine::default();
+        m.set_reads_presence(true);
+        m.set_presence(here(CLAUDE, true), 5.0); // before the finish: not enough
+        finished_at_10(&mut m);
+        assert_eq!(state_after(&mut m, 10.25), State::Working); // still waiting
+        assert_eq!(m.next_change(10.25), Some(10.0 + SETTLE + PRESENCE_WAIT));
+        m.set_presence(here(CLAUDE, true), 10.4);
+        let shown = m.changed(10.4).unwrap();
+        assert_eq!((shown.state, shown.quiet), (State::Done, true));
+    }
+
+    #[test]
+    fn no_reading_in_time_is_the_full_flow() {
+        let mut m = Machine::default();
+        m.set_reads_presence(true);
+        finished_at_10(&mut m);
+        assert_eq!(state_after(&mut m, 11.0), State::Working);
+        let shown = m.changed(10.0 + SETTLE + PRESENCE_WAIT).unwrap();
+        assert_eq!((shown.state, shown.quiet), (State::Done, false));
     }
 
     #[test]

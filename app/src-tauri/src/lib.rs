@@ -101,6 +101,8 @@ pub fn run() {
             let mut machine = state::Machine::default();
             let home = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
             machine.set_home(std::env::var(home).ok());
+            // Windows reads it in the Windows batch (read_presence).
+            machine.set_reads_presence(cfg!(target_os = "macos"));
             app.manage(Mutex::new(machine));
             let handle = app.handle().clone();
             thread::spawn(move || listen(handle));
@@ -344,9 +346,11 @@ fn look_around(app: &AppHandle) {
     if !NEEDS_PRESENCE.load(Ordering::Relaxed) {
         return;
     }
-    // Read before taking the lock: it waits on the main thread.
+    // Read before taking the lock: it waits on the main thread. Timed from
+    // the start, so a read that began before a finish never counts as after it.
+    let at = now();
     if let Some(presence) = read_presence(app) {
-        machine(app).set_presence(Some(presence), now());
+        machine(app).set_presence(Some(presence), at);
     }
 }
 
