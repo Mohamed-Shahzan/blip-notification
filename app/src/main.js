@@ -75,7 +75,8 @@ let showText = true;
 try {
   showText = localStorage.getItem(SHOW_TEXT) !== "off";
 } catch {}
-canvas.addEventListener("contextmenu", (e) => {
+// On Sprout or its bubble (the window takes clicks only there): code review 10 Nov.
+document.addEventListener("contextmenu", (e) => {
   e.preventDefault();
   showText = !showText;
   try {

@@ -572,11 +572,11 @@ const CONCEPTS = [
 
 // ---------- views ----------
 const views = [];
-// A press on any canvas (main button only) goes to everything: the archived concepts get their poke at once,
+// A press on any canvas (main button only, not a Mac Control-click) goes to everything: the archived concepts get their poke at once,
 // and every Sprout gets the press, so clicks and the 3 s hold show on all views.
 function sproutPointer(cv) {
-  cv.addEventListener('pointerdown', e => { if (e.button !== 0) return; poke(); sprouts.forEach(sp => sp.press()); });
-  cv.addEventListener('pointerup', e => { if (e.button === 0) sprouts.forEach(sp => sp.release()); });
+  cv.addEventListener('pointerdown', e => { if (!BlipSprout.isMainPress(e)) return; poke(); sprouts.forEach(sp => sp.press()); });
+  cv.addEventListener('pointerup', () => sprouts.forEach(sp => sp.release()));
   for (const ev of ['pointerleave', 'pointercancel']) cv.addEventListener(ev, () => sprouts.forEach(sp => sp.cancel()));
 }
 function addView(el, concept, opts) {

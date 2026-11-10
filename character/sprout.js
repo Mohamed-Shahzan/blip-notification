@@ -659,7 +659,7 @@
         x.dataset.sproutPart = 'x';
         x.onmouseenter = () => setHover('x');
         x.onmouseleave = () => setHover(null);
-        x.onclick = e => { e.stopPropagation(); close(); };
+        x.onclick = e => { e.stopPropagation(); if (isMainPress(e)) close(); };
         bubble.appendChild(x);
       }
       // Bottom-left corner of the bubble just above and right of the head (24, -50 in drawing units),
@@ -870,8 +870,9 @@
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resize) : null;
     if (ro) ro.observe(canvas);
     if (opts.pointer !== false) root.addEventListener('pointermove', onMove);
-    // Only the main button counts: a right-click opens its menu and leaves Sprout alone.
-    const POINTER = { pointerdown: e => { if (isMainPress(e)) press(); }, pointerup: e => { if (isMainPress(e)) release(); }, pointerleave: cancel, pointercancel: cancel };
+    // Only the main button counts: a right-click opens its menu and leaves Sprout alone. Any
+    // release ends a press, also one with Control pressed meanwhile (code review 10 Nov).
+    const POINTER = { pointerdown: e => { if (isMainPress(e)) press(); }, pointerup: release, pointerleave: cancel, pointercancel: cancel };
     if (opts.handlePress !== false) for (const ev in POINTER) canvas.addEventListener(ev, POINTER[ev]);
 
     return {
