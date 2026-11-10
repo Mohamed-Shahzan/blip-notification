@@ -62,6 +62,8 @@ const REPEAT_GAP = 10000;
 let spoke = { state: "", text: null, at: -Infinity };
 // The latest state from Rust, so a right-click can redraw the bubble with or without the snippet.
 let last = { state: "hidden" };
+// How long "Message text on/off" shows after a right-click.
+const TOGGLE_FOR = 1500;
 let lastText = null;
 
 // The message snippet under the line (PRD Level 1). Right-click Sprout hides or
@@ -80,10 +82,20 @@ canvas.addEventListener("contextmenu", (e) => {
   // In a state with a line, show it again with the snippet added or taken away;
   // otherwise say what changed.
   // The done bubbles (also quiet, and the peek's recall) are redrawn as they
-  // were: replacing them would lose the x (code review 9 Nov).
-  if (last.state === "done" || last.recall) doneBubble(last, true);
-  else if (SPEAKS.includes(sprout.state) && !sprout.peek) speak();
-  else sprout.say(showText ? "Message text on" : "Message text off", true, 1500, null);
+  // were: replacing them would lose the x (code review 9 Nov). The quiet and
+  // recall bubbles never show the snippet, so they first say what changed,
+  // then come back unless the state moved on (code review 10 Nov).
+  if (last.state === "done" && !last.quiet && !last.recall) doneBubble(last, true);
+  else if (last.state === "done" || last.recall) {
+    const was = last;
+    sprout.say(showText ? "Message text on" : "Message text off", true, TOGGLE_FOR, null);
+    setTimeout(() => {
+      if (last !== was) return;
+      doneBubble(last, true);
+      sendBox(); // the x is back: its hit box too
+    }, TOGGLE_FOR);
+  } else if (SPEAKS.includes(sprout.state) && !sprout.peek) speak();
+  else sprout.say(showText ? "Message text on" : "Message text off", true, TOGGLE_FOR, null);
   sendBox();
 });
 
