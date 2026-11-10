@@ -676,8 +676,8 @@
       bubble.style.left = (left + root.scrollX) + 'px';
       // Never above the page's top: a tall bubble (Done with three grey lines) grows down instead of
       // into the menu bar (Mohamed's test, 10 Nov).
-      const top = r.top + ch * .6 + by * u - bubble.offsetHeight;
-      bubble.style.top = (Math.max(6, top) + root.scrollY) + 'px';
+      const top = r.top + root.scrollY + ch * .6 + by * u - bubble.offsetHeight;
+      bubble.style.top = Math.max(6, top) + 'px';
       // Only if still open by the next frame: a frame can come late (a background tab), after hideBubble.
       requestAnimationFrame(() => { if (bubbleOpen) { bubble.style.opacity = 1; bubble.style.transform = 'scale(1)'; } });
       clearTimeout(bubbleTimer);
