@@ -52,7 +52,7 @@ test("the peek is still between sways and sways now and then", () => {
 // A browser stand-in with a hand-driven clock: frames run only when the test
 // says so, timers fire when the clock passes them.
 function fakeBrowser() {
-  let now = 0, rafs = [], timers = [], id = 0;
+  let now = 0, rafs = [], timers = [], id = 0, resizeCb = null, listeners = [], reduce = false;
   const ctx = new Proxy({}, {
     get: (o, k) => (k in o ? o[k] : k === "createLinearGradient" || k === "createRadialGradient" ? () => ({ addColorStop() {} }) : () => {}),
     set: (o, k, v) => ((o[k] = v), true),
@@ -70,6 +70,11 @@ function fakeBrowser() {
     setTimeout: (f, ms = 0) => (timers.push([++id, now + ms, f]), id),
     clearTimeout: (i) => { timers = timers.filter(([j]) => j !== i); },
     addEventListener() {}, removeEventListener() {},
+    ResizeObserver: class { constructor(f) { resizeCb = f; } observe() {} disconnect() {} },
+    matchMedia: (q) => {
+      const mq = { query: q, get matches() { return q.includes("reduce") && reduce; }, addEventListener: (t, f, o) => listeners.push({ mq, f, once: o && o.once }), removeEventListener: (t, f) => { listeners = listeners.filter((l) => l.f !== f); } };
+      return mq;
+    },
   });
   vm.runInContext(code, context);
   // Advance the clock by ms in 16 ms frames, firing due timers on the way.
@@ -81,7 +86,14 @@ function fakeBrowser() {
       for (const [, f] of due) f(now);
     }
   }
-  return { BlipSprout: context.BlipSprout, canvas, run, frames: () => rafs.length };
+  // The browser reports a change: a resize, another pixel ratio, Reduce Motion switched.
+  const fire = (part) => { for (const l of listeners.filter((l) => l.mq.query.includes(part))) { if (l.once) listeners = listeners.filter((x) => x !== l); l.f(); } };
+  return {
+    BlipSprout: context.BlipSprout, canvas, run, frames: () => rafs.length,
+    resize: () => resizeCb(),
+    setRatio: (r) => { context.devicePixelRatio = r; fire("dppx"); },
+    setReduce: (on) => { reduce = on; fire("reduce"); },
+  };
 }
 
 test("a peek at rest stops drawing and wakes up to sway", () => {
@@ -100,4 +112,56 @@ test("a peek at rest stops drawing and wakes up to sway", () => {
   sprout.setHover("body"); // the pointer rests on the peek: it grows, then rests again
   b.run(2000);
   assert.equal(sprout.running, false, "a pointer on the peek keeps it drawing");
+});
+
+function peekAtRest(date = new Date(2026, 0, 2)) {
+  const b = fakeBrowser();
+  const sprout = b.BlipSprout.create(b.canvas, { size: 32, bubble: false, pointer: false, handlePress: false, date: () => date });
+  sprout.setState("done");
+  sprout.setPeek(true);
+  return { b, sprout };
+}
+
+// Code review 13 Nov: things that change while the peek rests must wake the loop.
+test("a resize wakes a resting peek, which draws again and rests", () => {
+  const { b, sprout } = peekAtRest();
+  b.run(5000);
+  assert.equal(sprout.running, false);
+  b.resize();
+  assert.equal(sprout.running, true, "a resize clears the canvas: it must draw again");
+  b.run(2000);
+  assert.equal(sprout.running, false);
+});
+
+test("a new pixel ratio wakes a resting peek and is picked up", () => {
+  const { b, sprout } = peekAtRest();
+  b.run(5000);
+  assert.equal(b.canvas.width, 1800); // 900 wide at ratio 2
+  b.setRatio(1);
+  assert.equal(sprout.running, true);
+  b.run(500);
+  assert.equal(b.canvas.width, 900);
+  b.setRatio(2); // the watch re-arms: a second move is noticed too
+  b.run(500);
+  assert.equal(b.canvas.width, 1800);
+});
+
+test("Reduce Motion: no sway, and switching it off wakes the peek", () => {
+  const { b, sprout } = peekAtRest();
+  b.setReduce(true);
+  b.run(40000); // no sway at 28 s, and no timer to wake it
+  assert.equal(sprout.running, false);
+  b.setReduce(false);
+  assert.equal(sprout.running, true);
+  b.run(2000);
+  b.run(30000);
+  assert.equal(sprout.running, false, "swaying again then resting");
+});
+
+test("birthday confetti finishes before the peek rests", () => {
+  const { b, sprout } = peekAtRest(new Date(2026, 9, 18)); // 18 Oct
+  b.run(3000);
+  assert.equal(sprout.running, true, "confetti still falling");
+  b.run(2500);
+  assert.equal(sprout.running, false);
 });

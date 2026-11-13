@@ -756,7 +756,10 @@
       // Peeking and settled (a sway, or the pointer on it): the same 20 frames a second; at rest it stops below.
       if (S.peek && S.pk.x > .99 && Math.abs(S.pk.v) < .01 && now - last < 50) { raf = requestAnimationFrame(frame); return; }
       const dt = Math.min(.05, (now - last) / 1000); last = now;
-      const sway = S.peek ? peekSway((now - S.peekAt) / 1000) : 0;
+      const peekAge = (now - S.peekAt) / 1000, sway = S.peek ? peekSway(peekAge) : 0;
+      // Anything still moving keeps the loop going: every spring below says so through spr().
+      let moving = false;
+      const spr = (o, target, ...rest) => { spring(o, target, ...rest); if (Math.abs(target - o.x) > .01 || Math.abs(o.v) > .01) moving = true; };
       // Moving to a screen with another pixel density changes the ratio without any resize.
       if (Math.min(root.devicePixelRatio || 1, 3) !== dpr) resize();
       const sp = P.speed;
@@ -776,12 +779,12 @@
       if (S.shown === 'working' && (S.glanceIn -= dt * sp) <= 0) { S.glanceAge = 0; S.glanceIn = 8 + Math.random() * 7; }
 
       const w = 4 / P.trans, k = w * w, hidden = S.state === 'hidden';
-      spring(S.vis, hidden ? 0 : 1, dt, k, hidden ? .9 : .5);
-      spring(S.small, S.compact && !hidden ? 1 : 0, dt, k, .8);
-      spring(S.pk, S.peek && !hidden ? 1 : 0, dt, k, .8);
-      spring(S.hov, S.hover === 'body' && !hidden ? 1 : 0, dt, 300, .6);
+      spr(S.vis, hidden ? 0 : 1, dt, k, hidden ? .9 : .5);
+      spr(S.small, S.compact && !hidden ? 1 : 0, dt, k, .8);
+      spr(S.pk, S.peek && !hidden ? 1 : 0, dt, k, .8);
+      spr(S.hov, S.hover === 'body' && !hidden ? 1 : 0, dt, 300, .6);
       const np = needsPhase(S.age);
-      spring(S.hand, !hidden && S.shown === 'needs' && P.mHand && np.handUp && S.fed.x < .5 ? 1 : 0, dt, k, .4);
+      spr(S.hand, !hidden && S.shown === 'needs' && P.mHand && np.handUp && S.fed.x < .5 ? 1 : 0, dt, k, .4);
       S.blend = Math.min(1, S.blend + dt / P.trans);
       S.col = mix(S.colFrom, targetCol(S.shown), easeOut(S.blend));
 
@@ -808,13 +811,13 @@
       // Fed up: on while the clicks keep coming; when they stop the antenna springs back with a "phew".
       // Easter eggs: the leaf grows while held long enough (or by luck), the stars after a run of done moments.
       if (P.eggs && S.holdAt && now - S.holdAt > EGGS.HOLD_MS && S.state !== 'hidden') { S.leafOn = true; S.holdAt = 0; }
-      spring(S.leaf, P.eggs && (S.leafOn || now < S.luckyUntil) ? 1 : 0, dt, 110, .35);
-      spring(S.roll, P.eggs && now < S.rollUntil ? 1 : 0, dt, 110, .6);
+      spr(S.leaf, P.eggs && (S.leafOn || now < S.luckyUntil) ? 1 : 0, dt, 110, .35);
+      spr(S.roll, P.eggs && now < S.rollUntil ? 1 : 0, dt, 110, .6);
       S.partyAge += dt * sp;
       if (now - S.hourAt > 60000) { S.hour = today().getHours(); S.hourAt = now; } // night owl: once a minute
       const fedUp = now < S.fedUntil;
       if (S.fed.x > .5 && !fedUp && S.phewAge > 1) S.phewAge = 0;
-      spring(S.fed, fedUp ? 1 : 0, dt, 90, .45);
+      spr(S.fed, fedUp ? 1 : 0, dt, 90, .45);
 
       ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height);
       // Fully hidden and at rest: stop the loop until setState or poke starts it again.
@@ -882,16 +885,14 @@
         }
       }
       // Peeking and nothing moving: stop drawing until the next sway (a timer) or a change (setState, setPeek,
-      // hover, resize, a new pixel ratio) starts the loop again. Nothing moving: the peek and Sprout are in
-      // place, the hover grow has settled either way (a pointer resting on the peek must not keep it drawing,
-      // code review 13 Nov), no sway and no birthday confetti falling.
+      // hover, resize, a new pixel ratio, Reduce Motion) starts the loop again. Nothing moving: every spring has
+      // settled (a pointer resting on the peek too, code review 13 Nov), the colour has finished changing, no
+      // sway and no birthday confetti falling.
       const still = !!(reduceMq && reduceMq.matches);
-      const hovSettled = Math.abs(S.hov.v) < .01 && (S.hover === 'body' ? S.hov.x > .99 : S.hov.x < .01);
       const confetti = P.eggs && !still && S.partyAge < EGGS.PARTY_MS / 1000;
-      if (S.peek && !hidden && S.pk.x > .99 && Math.abs(S.pk.v) < .01 && S.vis.x > .99 && Math.abs(S.vis.v) < .01 &&
-          hovSettled && !confetti && sway === 0) {
+      if (S.peek && !hidden && !moving && S.blend >= 1 && !confetti && sway === 0) {
         clearTimeout(swayTimer);
-        if (!still) swayTimer = setTimeout(start, peekSwayWait((now - S.peekAt) / 1000) * 1000);
+        if (!still) swayTimer = setTimeout(start, peekSwayWait(peekAge) * 1000);
         return;
       }
       raf = requestAnimationFrame(frame);
@@ -908,6 +909,8 @@
       if (dprMq && dprMq.addEventListener) dprMq.addEventListener('change', onDpr, { once: true });
     }
     watchDpr();
+    // Reduce Motion switched on or off: a resting peek draws again (and sets or drops its sway timer).
+    if (reduceMq && reduceMq.addEventListener) reduceMq.addEventListener('change', start);
     if (ro) ro.observe(canvas);
     if (opts.pointer !== false) root.addEventListener('pointermove', onMove);
     // Only the main button counts: a right-click opens its menu and leaves Sprout alone. Any
@@ -929,6 +932,7 @@
         clearTimeout(bubbleTimer); clearTimeout(eggTimer); if (bubble) bubble.remove();
         if (ro) ro.disconnect();
         if (dprMq && dprMq.removeEventListener) dprMq.removeEventListener('change', onDpr);
+        if (reduceMq && reduceMq.removeEventListener) reduceMq.removeEventListener('change', start);
         root.removeEventListener('pointermove', onMove);
         for (const ev in POINTER) canvas.removeEventListener(ev, POINTER[ev]);
       }
