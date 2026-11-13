@@ -53,8 +53,9 @@ test("the peek is still between sways and sways now and then", () => {
 // says so, timers fire when the clock passes them.
 function fakeBrowser() {
   let now = 0, rafs = [], timers = [], id = 0, resizeCb = null, listeners = [], reduce = false;
+  let drawn = 0;
   const ctx = new Proxy({}, {
-    get: (o, k) => (k in o ? o[k] : k === "createLinearGradient" || k === "createRadialGradient" ? () => ({ addColorStop() {} }) : () => {}),
+    get: (o, k) => (k === "clearRect" ? () => { drawn++; } : k in o ? o[k] : k === "createLinearGradient" || k === "createRadialGradient" ? () => ({ addColorStop() {} }) : () => {}),
     set: (o, k, v) => ((o[k] = v), true),
   });
   const canvas = {
@@ -89,7 +90,7 @@ function fakeBrowser() {
   // The browser reports a change: a resize, another pixel ratio, Reduce Motion switched.
   const fire = (part) => { for (const l of listeners.filter((l) => l.mq.query.includes(part))) { if (l.once) listeners = listeners.filter((x) => x !== l); l.f(); } };
   return {
-    BlipSprout: context.BlipSprout, canvas, run, frames: () => rafs.length,
+    BlipSprout: context.BlipSprout, canvas, run, frames: () => rafs.length, drawn: () => drawn,
     resize: () => resizeCb(),
     setRatio: (r) => { context.devicePixelRatio = r; fire("dppx"); },
     setReduce: (on) => { reduce = on; fire("reduce"); },
@@ -164,4 +165,26 @@ test("birthday confetti finishes before the peek rests", () => {
   assert.equal(sprout.running, true, "confetti still falling");
   b.run(2500);
   assert.equal(sprout.running, false);
+});
+
+test("a colour change keeps a resting peek drawing until it has finished", () => {
+  const { b, sprout } = peekAtRest();
+  b.run(5000);
+  assert.equal(sprout.running, false);
+  sprout.setState("error"); // a new state starts a colour blend
+  b.run(100);
+  assert.equal(sprout.running, true, "stopped in the middle of the colour change");
+  b.run(3000);
+  assert.equal(sprout.running, false);
+});
+
+test("a peek that ends leaves no sway timer behind", () => {
+  const { b, sprout } = peekAtRest();
+  b.run(5000);
+  sprout.setState("hidden");
+  sprout.setPeek(false);
+  b.run(2000);
+  const before = b.drawn();
+  b.run(40000); // a stale timer would wake the loop at about 27 s
+  assert.equal(b.drawn(), before);
 });

@@ -493,6 +493,9 @@
       vis: { x: 0, v: 0 }, hand: { x: 0, v: 0 }, small: { x: 0, v: 0 }, compact: false, pk: { x: 0, v: 0 }, peek: false, peekAt: 0, hov: { x: 0, v: 0 }, hover: null,
       look: { x: 0, y: 0 }, mouse: null, col: [79, 140, 255], colFrom: [79, 140, 255]
     };
+    // Anything still moving keeps the loop going: every spring in frame() says so through spr().
+    let moving = false;
+    const spr = (o, target, ...rest) => { spring(o, target, ...rest); if (Math.abs(target - o.x) > .01 || Math.abs(o.v) > .01) moving = true; };
     let raf = 0, swayTimer = 0, last = 0, cw = 0, ch = 0, dpr = 1, rect = null, rectAt = 0;
     const reduceMq = root.matchMedia ? root.matchMedia('(prefers-reduced-motion: reduce)') : null;
 
@@ -753,13 +756,9 @@
       // Small and settled: 20 frames a second is plenty for a bulb that pulses every 5 s.
       // (50 ms is the longest step dt allows, so the pulse keeps its time.)
       if (S.compact && S.small.x > .99 && Math.abs(S.small.v) < .01 && now - last < 50) { raf = requestAnimationFrame(frame); return; }
-      // Peeking and settled (a sway, or the pointer on it): the same 20 frames a second; at rest it stops below.
-      if (S.peek && S.pk.x > .99 && Math.abs(S.pk.v) < .01 && now - last < 50) { raf = requestAnimationFrame(frame); return; }
       const dt = Math.min(.05, (now - last) / 1000); last = now;
       const peekAge = (now - S.peekAt) / 1000, sway = S.peek ? peekSway(peekAge) : 0;
-      // Anything still moving keeps the loop going: every spring below says so through spr().
-      let moving = false;
-      const spr = (o, target, ...rest) => { spring(o, target, ...rest); if (Math.abs(target - o.x) > .01 || Math.abs(o.v) > .01) moving = true; };
+      moving = false;
       // Moving to a screen with another pixel density changes the ratio without any resize.
       if (Math.min(root.devicePixelRatio || 1, 3) !== dpr) resize();
       const sp = P.speed;
