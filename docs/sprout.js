@@ -124,6 +124,18 @@
   // Peek (done flow, look C picked 9 Nov in character/done-flow.html): the lower part of a happy face under the
   // top edge, PEEK times the sketch's drawing, PEEK_RX wide and reaching PEEK_DOWN below the edge (drawing units).
   const PEEK = 1.3, PEEK_RX = 24 * PEEK, PEEK_DOWN = 28 * PEEK;
+  // The peek holds still and sways once every PEEK_SWAY_EVERY seconds for PEEK_SWAY_FOR seconds. Between sways
+  // nothing is drawn: swaying all the time cost about 12% of a core for hours, still about 1.7% (13 Nov).
+  const PEEK_SWAY_EVERY = 30, PEEK_SWAY_FOR = 2.4;
+  // a: seconds since the peek began. How far into a sway it is (0 to 1), or 0 while still; the first sway
+  // ends PEEK_SWAY_EVERY seconds in. wait: seconds until the next sway starts (0 during one).
+  function peekSway(a) {
+    const into = (a % PEEK_SWAY_EVERY) - (PEEK_SWAY_EVERY - PEEK_SWAY_FOR);
+    return a > 0 && into > 0 ? into / PEEK_SWAY_FOR : 0;
+  }
+  function peekSwayWait(a) {
+    return peekSway(a) > 0 ? 0 : (PEEK_SWAY_EVERY - PEEK_SWAY_FOR) - (a % PEEK_SWAY_EVERY);
+  }
   // Click ladder. Clicks count as one streak while each comes within STREAK_GAP ms of the last:
   // 3 clicks say what Sprout is doing; from 6 on it is fed up (tired eyes, antenna flopped over) until the
   // clicks stop for FED_HOLD ms.
@@ -401,10 +413,11 @@
   }
 
   // The peek, with the hang point at 0,0: Sprout's lower face in a light tint of its colour, closed happy eyes
-  // and the done smile, swaying a little. Clipped at the hang point so it seems to hang from the top edge.
+  // and the done smile, swaying now and then (st.sway, see peekSway). Clipped at the hang point so it seems to
+  // hang from the top edge. One sway: a swing each way and two small bobs, easing in and out of still.
   function drawPeek(ctx, st) {
-    const c = st.col, t = st.t, tint = shade(c, .38);
-    const rot = st.reduce ? 0 : Math.sin(t * 1.3) * .05, drop = st.reduce ? 1 : 1 + Math.sin(t * 2.6) * .8;
+    const c = st.col, tint = shade(c, .38), p = st.reduce ? 0 : st.sway, ease = Math.sin(p * Math.PI);
+    const rot = Math.sin(p * TAU) * ease * .07, drop = 1 + Math.sin(p * 2 * TAU) * ease * .8;
     ctx.save(); ctx.globalAlpha = st.alpha;
     ctx.beginPath(); ctx.rect(-60, 0, 120, 60); ctx.clip();
     ctx.scale(PEEK, PEEK); ctx.translate(0, drop); ctx.rotate(rot);
@@ -477,10 +490,10 @@
       state: 'hidden', shown: 'working', age: 0, t: 0, blend: 1, blinkClock: 1.2, blinkFactor: 1, double: false,
       pokeAge: 9, bubbleAge: 9, streak: 0, leafOn: false, luckyUntil: 0, leaf: { x: 0, v: 0 }, doneRun: 0, rollUntil: 0, roll: { x: 0, v: 0 }, partyAge: 9, partyDay: '', holdAt: 0, hour: 12, hourAt: -1e9, lastClick: -1e9, fedUntil: 0, fed: { x: 0, v: 0 }, phewAge: 9, changeAge: 9, attend: 0, mouseAt: -1e9,
       read: { i: 0, clock: 0, x: 0, y: 0, tx: 0, ty: 0 }, glanceAge: 9, glanceIn: 6,
-      vis: { x: 0, v: 0 }, hand: { x: 0, v: 0 }, small: { x: 0, v: 0 }, compact: false, pk: { x: 0, v: 0 }, peek: false, hov: { x: 0, v: 0 }, hover: null,
+      vis: { x: 0, v: 0 }, hand: { x: 0, v: 0 }, small: { x: 0, v: 0 }, compact: false, pk: { x: 0, v: 0 }, peek: false, peekAt: 0, hov: { x: 0, v: 0 }, hover: null,
       look: { x: 0, y: 0 }, mouse: null, col: [79, 140, 255], colFrom: [79, 140, 255]
     };
-    let raf = 0, last = 0, cw = 0, ch = 0, dpr = 1, rect = null, rectAt = 0;
+    let raf = 0, swayTimer = 0, last = 0, cw = 0, ch = 0, dpr = 1, rect = null, rectAt = 0;
     const reduceMq = root.matchMedia ? root.matchMedia('(prefers-reduced-motion: reduce)') : null;
 
     function targetCol(s) {
@@ -580,7 +593,10 @@
     // Shrinking closes the bubble, which would otherwise float beside the empty space.
     function setCompact(on) { S.compact = !!on; if (on) { S.peek = false; hideBubble(); } start(); }
     // Peeking closes the bubble too; the state underneath stays, so coming back down replays nothing.
-    function setPeek(on) { S.peek = !!on; if (on) { S.compact = false; hideBubble(); } start(); }
+    function setPeek(on) {
+      if (on && !S.peek) S.peekAt = performance.now();
+      S.peek = !!on; if (on) { S.compact = false; hideBubble(); } start();
+    }
     function lookAt(x, y) { S.mouse = { x, y }; S.mouseAt = performance.now(); }
 
     // Speech bubble: a small HTML element next to the canvas (text at canvas scale would be too small at 32 px).
@@ -848,7 +864,7 @@
           const ps = peekPx() / drawPx();
           const grow = ps * (1 + .1 * S.hov.x);
           ctx.save(); ctx.translate(0, hangY + (reduce ? 0 : (1 - pk) * -PEEK_DOWN)); ctx.scale(grow, grow);
-          drawPeek(ctx, { ...st, alpha: alpha * clamp(pk * 1.4 - .4, 0, 1) });
+          drawPeek(ctx, { ...st, alpha: alpha * clamp(pk * 1.4 - .4, 0, 1), sway: peekSway((now - S.peekAt) / 1000) });
           ctx.restore();
         }
         // Birthday confetti, drawn outside the character's tilt and squash: pieces fall from above the head and fade out (left out with Reduce Motion).
@@ -862,6 +878,14 @@
             ctx.restore();
           }
         }
+      }
+      // Peeking at rest (settled, not hovered, between sways): stop drawing and wake for the next sway.
+      const peekAge = (now - S.peekAt) / 1000;
+      if (S.peek && !hidden && S.pk.x > .99 && Math.abs(S.pk.v) < .01 && S.vis.x > .99 && Math.abs(S.vis.v) < .01 &&
+          S.hover !== 'body' && S.hov.x < .01 && Math.abs(S.hov.v) < .01 && peekSway(peekAge) === 0) {
+        clearTimeout(swayTimer);
+        if (!(reduceMq && reduceMq.matches)) swayTimer = setTimeout(start, peekSwayWait(peekAge) * 1000);
+        return;
       }
       raf = requestAnimationFrame(frame);
     }
@@ -885,7 +909,7 @@
       get line() { return lines[S.shown]; },
       get running() { return raf !== 0; },
       destroy() {
-        if (raf) cancelAnimationFrame(raf); raf = 0;
+        if (raf) cancelAnimationFrame(raf); raf = 0; clearTimeout(swayTimer);
         clearTimeout(bubbleTimer); clearTimeout(eggTimer); if (bubble) bubble.remove();
         if (ro) ro.disconnect();
         root.removeEventListener('pointermove', onMove);
@@ -894,5 +918,5 @@
     };
   }
 
-  root.BlipSprout = { create, canvasSize, isMainPress, DEFAULTS, STATES, withDefaults: s => merge(DEFAULTS, s) };
+  root.BlipSprout = { create, canvasSize, isMainPress, peekSway, peekSwayWait, DEFAULTS, STATES, withDefaults: s => merge(DEFAULTS, s) };
 })(typeof window !== 'undefined' ? window : globalThis);
