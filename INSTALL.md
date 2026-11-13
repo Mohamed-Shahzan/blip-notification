@@ -38,3 +38,13 @@ You are Claude Code, installing Blip for the person you are working with. Blip i
    - The plugin takes effect in new sessions. In the Claude Desktop app, open a new session; in the Terminal, start `claude` again.
    - In the next session, Sprout appears at the top centre of the screen while Claude works, hops when it is done, and waves when Claude needs them. Right-click Sprout to hide the message text.
    - To uninstall: stop the app (`Ctrl+C` where it runs), run `claude plugin marketplace remove blip-notification`, then delete `~/blip-notification` and `~/.blip`.
+
+## By hand (for a person, not Claude)
+
+You need about 15 minutes. Skip any tool you already have.
+
+1. Install the tools: Apple's command line tools (`xcode-select --install`), Rust 1.85 or later ([rustup.rs](https://rustup.rs), or `rustup update`), Node.js 18 or later ([nodejs.org](https://nodejs.org)) and [Claude Code](https://claude.com/claude-code).
+2. Download Blip: `git clone https://github.com/Mohamed-Shahzan/blip-notification.git ~/blip-notification`
+3. Build and start the app: `cd ~/blip-notification/app && npm install && npm run tauri dev`. The first build takes several minutes. Keep this Terminal window open, because Blip runs while it does. Next time only the last command is needed.
+4. In a new Terminal window, connect Claude Code: `claude plugin marketplace add Mohamed-Shahzan/blip-notification`, then `claude plugin install blip@blip-notification`.
+5. Start a new Claude Code session (in the Desktop app, open a new session) and ask anything. Sprout appears while Claude works.

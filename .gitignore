@@ -25,6 +25,7 @@ HANDOFF.md
 .claude/
 app/README.md
 hooks/experiments/
+character/done-flow.html
 docs/*
 !docs/index.html
 !docs/sprout.js
