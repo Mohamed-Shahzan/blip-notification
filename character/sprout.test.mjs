@@ -48,3 +48,56 @@ test("the peek is still between sways and sways now and then", () => {
   assert.ok(Math.abs(peekSwayWait(30.5) - 27.1) < 1e-9); // next at 57.6 s
   assert.ok(peekSway(59) > 0); // and again every 30 s
 });
+
+// A browser stand-in with a hand-driven clock: frames run only when the test
+// says so, timers fire when the clock passes them.
+function fakeBrowser() {
+  let now = 0, rafs = [], timers = [], id = 0;
+  const ctx = new Proxy({}, {
+    get: (o, k) => (k in o ? o[k] : k === "createLinearGradient" || k === "createRadialGradient" ? () => ({ addColorStop() {} }) : () => {}),
+    set: (o, k, v) => ((o[k] = v), true),
+  });
+  const canvas = {
+    clientWidth: 900, clientHeight: 136, width: 0, height: 0,
+    getContext: () => ctx, addEventListener() {}, removeEventListener() {},
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 900, height: 136 }),
+  };
+  const context = vm.createContext({
+    navigator: { platform: "MacIntel" }, devicePixelRatio: 2, Math, Date,
+    performance: { now: () => now },
+    requestAnimationFrame: (f) => (rafs.push([++id, f]), id),
+    cancelAnimationFrame: (i) => { rafs = rafs.filter(([j]) => j !== i); },
+    setTimeout: (f, ms = 0) => (timers.push([++id, now + ms, f]), id),
+    clearTimeout: (i) => { timers = timers.filter(([j]) => j !== i); },
+    addEventListener() {}, removeEventListener() {},
+  });
+  vm.runInContext(code, context);
+  // Advance the clock by ms in 16 ms frames, firing due timers on the way.
+  function run(ms) {
+    for (const end = now + ms; now < end; ) {
+      now += 16;
+      for (const t of timers.filter(([, at]) => at <= now)) { timers = timers.filter((x) => x !== t); t[2](); }
+      const due = rafs; rafs = [];
+      for (const [, f] of due) f(now);
+    }
+  }
+  return { BlipSprout: context.BlipSprout, canvas, run, frames: () => rafs.length };
+}
+
+test("a peek at rest stops drawing and wakes up to sway", () => {
+  const b = fakeBrowser();
+  const sprout = b.BlipSprout.create(b.canvas, { size: 32, bubble: false, pointer: false, handlePress: false, date: () => new Date(2026, 0, 2) });
+  sprout.setState("done");
+  sprout.setPeek(true);
+  b.run(5000); // goes up and settles
+  assert.equal(sprout.running, false, "settled peek still drawing");
+  b.run(20000); // still resting at 25 s
+  assert.equal(sprout.running, false);
+  b.run(4000); // 29 s: inside the first sway (27.6 to 30 s)
+  assert.equal(sprout.running, true, "no sway after 30 s");
+  b.run(3000); // 32 s: the sway is over
+  assert.equal(sprout.running, false, "still drawing after the sway");
+  sprout.setHover("body"); // the pointer rests on the peek: it grows, then rests again
+  b.run(2000);
+  assert.equal(sprout.running, false, "a pointer on the peek keeps it drawing");
+});

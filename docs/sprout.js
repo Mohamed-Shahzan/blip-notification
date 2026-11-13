@@ -595,6 +595,7 @@
     // Peeking closes the bubble too; the state underneath stays, so coming back down replays nothing.
     function setPeek(on) {
       if (on && !S.peek) S.peekAt = performance.now();
+      if (!on) clearTimeout(swayTimer);
       S.peek = !!on; if (on) { S.compact = false; hideBubble(); } start();
     }
     function lookAt(x, y) { S.mouse = { x, y }; S.mouseAt = performance.now(); }
@@ -752,9 +753,10 @@
       // Small and settled: 20 frames a second is plenty for a bulb that pulses every 5 s.
       // (50 ms is the longest step dt allows, so the pulse keeps its time.)
       if (S.compact && S.small.x > .99 && Math.abs(S.small.v) < .01 && now - last < 50) { raf = requestAnimationFrame(frame); return; }
-      // Peeking and settled: the same 20 frames a second, since the peek can stay for hours.
+      // Peeking and settled (a sway, or the pointer on it): the same 20 frames a second; at rest it stops below.
       if (S.peek && S.pk.x > .99 && Math.abs(S.pk.v) < .01 && now - last < 50) { raf = requestAnimationFrame(frame); return; }
       const dt = Math.min(.05, (now - last) / 1000); last = now;
+      const sway = S.peek ? peekSway((now - S.peekAt) / 1000) : 0;
       // Moving to a screen with another pixel density changes the ratio without any resize.
       if (Math.min(root.devicePixelRatio || 1, 3) !== dpr) resize();
       const sp = P.speed;
@@ -864,7 +866,7 @@
           const ps = peekPx() / drawPx();
           const grow = ps * (1 + .1 * S.hov.x);
           ctx.save(); ctx.translate(0, hangY + (reduce ? 0 : (1 - pk) * -PEEK_DOWN)); ctx.scale(grow, grow);
-          drawPeek(ctx, { ...st, alpha: alpha * clamp(pk * 1.4 - .4, 0, 1), sway: peekSway((now - S.peekAt) / 1000) });
+          drawPeek(ctx, { ...st, alpha: alpha * clamp(pk * 1.4 - .4, 0, 1), sway });
           ctx.restore();
         }
         // Birthday confetti, drawn outside the character's tilt and squash: pieces fall from above the head and fade out (left out with Reduce Motion).
@@ -879,19 +881,33 @@
           }
         }
       }
-      // Peeking at rest (settled, not hovered, between sways): stop drawing and wake for the next sway.
-      const peekAge = (now - S.peekAt) / 1000;
+      // Peeking and nothing moving: stop drawing until the next sway (a timer) or a change (setState, setPeek,
+      // hover, resize, a new pixel ratio) starts the loop again. Nothing moving: the peek and Sprout are in
+      // place, the hover grow has settled either way (a pointer resting on the peek must not keep it drawing,
+      // code review 13 Nov), no sway and no birthday confetti falling.
+      const still = !!(reduceMq && reduceMq.matches);
+      const hovSettled = Math.abs(S.hov.v) < .01 && (S.hover === 'body' ? S.hov.x > .99 : S.hov.x < .01);
+      const confetti = P.eggs && !still && S.partyAge < EGGS.PARTY_MS / 1000;
       if (S.peek && !hidden && S.pk.x > .99 && Math.abs(S.pk.v) < .01 && S.vis.x > .99 && Math.abs(S.vis.v) < .01 &&
-          S.hover !== 'body' && S.hov.x < .01 && Math.abs(S.hov.v) < .01 && peekSway(peekAge) === 0) {
+          hovSettled && !confetti && sway === 0) {
         clearTimeout(swayTimer);
-        if (!(reduceMq && reduceMq.matches)) swayTimer = setTimeout(start, peekSwayWait(peekAge) * 1000);
+        if (!still) swayTimer = setTimeout(start, peekSwayWait((now - S.peekAt) / 1000) * 1000);
         return;
       }
       raf = requestAnimationFrame(frame);
     }
 
     resize();
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resize) : null;
+    // A resize clears the canvas, so it draws again even when the loop had stopped (code review 13 Nov).
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => { resize(); start(); }) : null;
+    // Moving to a screen with another pixel density: draw again, frame() picks up the new ratio.
+    let dprMq = null;
+    function onDpr() { start(); watchDpr(); }
+    function watchDpr() {
+      dprMq = root.matchMedia ? root.matchMedia(`(resolution: ${root.devicePixelRatio || 1}dppx)`) : null;
+      if (dprMq && dprMq.addEventListener) dprMq.addEventListener('change', onDpr, { once: true });
+    }
+    watchDpr();
     if (ro) ro.observe(canvas);
     if (opts.pointer !== false) root.addEventListener('pointermove', onMove);
     // Only the main button counts: a right-click opens its menu and leaves Sprout alone. Any
@@ -912,6 +928,7 @@
         if (raf) cancelAnimationFrame(raf); raf = 0; clearTimeout(swayTimer);
         clearTimeout(bubbleTimer); clearTimeout(eggTimer); if (bubble) bubble.remove();
         if (ro) ro.disconnect();
+        if (dprMq && dprMq.removeEventListener) dprMq.removeEventListener('change', onDpr);
         root.removeEventListener('pointermove', onMove);
         for (const ev in POINTER) canvas.removeEventListener(ev, POINTER[ev]);
       }
