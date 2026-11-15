@@ -4,9 +4,12 @@
 # Code does not enforce `timeout` on async command hooks. Always exits 0.
 
 # The session's process, so Blip can walk up to the app the session runs in.
-# Git Bash numbers its own processes; /proc/<pid>/winpid holds the Windows one.
+# Mac: the parent, Claude. Windows: Git Bash cannot see a Windows parent (it
+# reports 1), so this script sends its own Windows id ($$ stays this script's
+# even inside $(...)) and Blip walks up from it to claude.exe while this
+# script waits for the answer.
 pid=$PPID
-winpid=$(cat "/proc/$PPID/winpid" 2>/dev/null)
+winpid=$(cat "/proc/$$/winpid" 2>/dev/null)
 # When it was sent, so events that reach a frozen Blip late are still put in order.
 ts=$(date +%s)
 url="http://127.0.0.1:${BLIP_PORT:-47821}/hook?pid=$pid${winpid:+&winpid=$winpid}&ts=$ts"
