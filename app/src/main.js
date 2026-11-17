@@ -132,7 +132,9 @@ function doneBubble(s, force) {
     detail = [s.project];
   } else {
     line = `${said}${hint}`;
-    detail = [s.project, more, showText ? s.text : null];
+    // An error's reason always shows, even with message text off (Mohamed,
+    // 18 Nov): the toggle hides Claude's reply, not why something failed.
+    detail = [s.project, more, showText || s.error ? s.text : null];
   }
   detail = detail.filter(Boolean);
   const key = JSON.stringify([line, detail, s.quiet]);
