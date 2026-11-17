@@ -47,11 +47,12 @@ const REMEMBER: usize = 64;
 pub enum State {
     #[default]
     Hidden,
-    // Sprout peeking under the notch: a finished session not checked yet.
+    // Sprout peeking under the notch: a finished session (Done or error) not checked yet.
     Peek,
     Done,
-    // Below Working since 18 Nov: an error waits like Done while other
-    // sessions work, so one old error no longer hides all new work.
+    // Above Done (an error the user has not seen outranks a finish) but below
+    // Working since 18 Nov: it waits while other sessions work, so one old
+    // error no longer hides all new work.
     Error,
     Working,
     NeedsYou,
@@ -240,7 +241,7 @@ pub struct Shown {
     pub quiet: bool,
     // Other finished sessions not checked yet ("+N more").
     pub more: usize,
-    // The peek was clicked: how long ago Claude finished ("25 min ago").
+    // The peek was clicked: how long ago Claude finished or failed ("25 min ago").
     pub recall: Option<String>,
     // The finish shown (bubble, peek or recall) was an error.
     pub error: bool,
@@ -282,6 +283,9 @@ struct Finished {
     bubble: bool,
     // Until quiet is decided, Sprout keeps Working (Machine::reads_presence).
     waits: bool,
+    // The turn failed. Kept here, not read from the session's outcome: a later
+    // turn resets the outcome, and an old error must stay one (code review 18 Nov).
+    error: bool,
 }
 
 impl Finished {
@@ -295,6 +299,7 @@ impl Finished {
             quiet: Some(false),
             bubble: true,
             waits: false,
+            error: true,
         }
     }
 }
@@ -392,10 +397,14 @@ impl Machine {
                         s.finished = None;
                     }
                 }
-                // It ended in an error after all: that is what shows.
+                // It ended in an error after all: that is what shows. Claude Code
+                // reports a failure twice (the hook, then the mod): the second
+                // report keeps the finish the first made (code review 18 Nov).
                 Kind::TurnEnd(End::Error) => {
                     s.outcome = Outcome::Error;
-                    s.finished = Some(Finished::error(now));
+                    if !s.finished.as_ref().is_some_and(|f| f.error) {
+                        s.finished = Some(Finished::error(now));
+                    }
                 }
                 _ => {}
             }
@@ -430,6 +439,7 @@ impl Machine {
                         quiet: None,
                         bubble: true,
                         waits,
+                        error: false,
                     });
                 }
                 if s.outcome == Outcome::Error {
@@ -489,7 +499,7 @@ impl Machine {
     }
 
     // The next time the state changes by itself: Done showing after SETTLE, and
-    // the quiet Done hiding again.
+    // the quiet Done hiding again. An error never changes by itself.
     pub fn next_change(&self, now: f64) -> Option<f64> {
         self.sessions
             .values()
@@ -505,11 +515,12 @@ impl Machine {
     }
 
     // True while Blip needs to know what the user is doing: a finish waits for
-    // its quiet decision, or is not checked yet.
+    // its quiet decision, or is not checked yet. Not for an error, which
+    // stays until the user acts, whatever app is in front.
     pub fn needs_presence(&self) -> bool {
         self.sessions
             .values()
-            .any(|s| s.finished.is_some() && s.outcome != Outcome::Error)
+            .any(|s| s.finished.as_ref().is_some_and(|f| !f.error))
     }
 
     // What the user is doing now (Mac: front app, idle time, lock).
@@ -531,7 +542,6 @@ impl Machine {
             .and_then(|p| p.front);
         for s in self.sessions.values_mut() {
             let app = s.app.as_ref().map(|a| a.pid);
-            let error = s.outcome == Outcome::Error;
             let Some(f) = &mut s.finished else { continue };
             let fresh = !f.waits || read_at.is_some_and(|at| at >= f.at);
             if f.quiet.is_none()
@@ -545,7 +555,7 @@ impl Machine {
             }
             let over = match f.quiet {
                 Some(true) => now >= f.at + SETTLE + DONE_FOR,
-                Some(false) => !error && checked.is_some() && checked == app,
+                Some(false) => !f.error && checked.is_some() && checked == app,
                 None => false,
             };
             if over {
@@ -649,7 +659,7 @@ impl Machine {
         if let Some(s) = self.top(now) {
             shown.app = s.app.as_ref().map(|a| a.name.clone());
             if matches!(state, State::Done | State::Error | State::Peek) {
-                shown.error = s.outcome == Outcome::Error;
+                shown.error = s.finished.as_ref().is_some_and(|f| f.error);
                 shown.project = s
                     .cwd
                     .as_deref()
@@ -710,11 +720,7 @@ impl Session {
             return State::Hidden;
         };
         // An error shows as Error where a finish shows Done (same bubble, x and peek).
-        let done = if self.outcome == Outcome::Error {
-            State::Error
-        } else {
-            State::Done
-        };
+        let done = if f.error { State::Error } else { State::Done };
         let since = now - f.at;
         match f.quiet {
             _ if since < SETTLE => State::Working,
@@ -1371,6 +1377,59 @@ mod tests {
         failed_at_10(&mut m);
         feed(&mut m, "hook", hook("UserPromptSubmit", "s", "p2"), 20.0);
         assert_eq!(state_after(&mut m, 20.0), State::Working);
+    }
+
+    // Code review 18 Nov: Claude Code reports a failure twice (the StopFailure
+    // hook, then the mod's "error" a moment later). The second must not start
+    // the error again: it flashed Working and reopened a closed bubble.
+    #[test]
+    fn the_same_error_reported_twice_changes_nothing() {
+        let mut m = Machine::default();
+        failed_at_10(&mut m);
+        assert_eq!(state_after(&mut m, 10.5), State::Error);
+        m.close_bubble();
+        assert_eq!(state_after(&mut m, 10.6), State::Peek);
+        let mod_error =
+            json!({ "kind": "turn.complete", "session": "s", "reason": "error", "ts": 10.0 });
+        feed(&mut m, "mod", mod_error, 11.0);
+        assert_eq!(
+            state_after(&mut m, 11.0),
+            State::Peek,
+            "the closed bubble stays closed"
+        );
+        assert_eq!(
+            state_after(&mut m, 11.1),
+            State::Peek,
+            "no flash of Working"
+        );
+        // And while the bubble is still open: no restart of its timing either.
+        let mut m = Machine::default();
+        failed_at_10(&mut m);
+        feed(
+            &mut m,
+            "mod",
+            json!({ "kind": "turn.complete", "session": "s", "reason": "error", "ts": 10.0 }),
+            11.0,
+        );
+        assert_eq!(state_after(&mut m, 11.0), State::Error);
+    }
+
+    // Code review 18 Nov: a turn Claude starts by itself (a background task
+    // ending) reset the session's outcome, so an old error showed as "All done".
+    #[test]
+    fn an_old_error_stays_an_error_when_claude_starts_a_turn_itself() {
+        let mut m = Machine::default();
+        failed_at_10(&mut m);
+        let own = json!({ "hook_event_name": "UserPromptSubmit", "session_id": "s", "prompt_id": "p2",
+                          "prompt": "<task-notification>done</task-notification>" });
+        feed(&mut m, "hook", own, 20.0);
+        feed(&mut m, "hook", hook("Stop", "s", "p2"), 25.0);
+        let shown = m.changed(26.0).or_else(|| Some(m.shown(26.0))).unwrap();
+        assert_eq!((shown.state, shown.error), (State::Error, true));
+        // The app in front does not clear it either.
+        m.set_presence(here(CLAUDE, true), 30.0);
+        assert_eq!(state_after(&mut m, 40.0), State::Error);
+        assert!(!m.needs_presence());
     }
 
     #[test]
