@@ -53,8 +53,8 @@ const ACTS = { onClick: () => click("sprout"), onClose: () => click("x") };
 const NAMES = { needs_you: "needs" };
 
 // Sprout says its line when it changes to one of these. Working stays quiet,
-// since it starts every turn. Done has its own bubble (doneBubble).
-const SPEAKS = ["needs", "error"];
+// since it starts every turn. Done and error have their own bubble (doneBubble).
+const SPEAKS = ["needs"];
 const SPEAK_FOR = 6000;
 // Several permissions in a row flip needs you and working back and forth;
 // the same line with the same snippet again this soon stays unsaid.
@@ -90,8 +90,9 @@ document.addEventListener("contextmenu", (e) => {
   // were: replacing them would lose the x (code review 9 Nov). The quiet and
   // recall bubbles never show the snippet, so they first say what changed,
   // then come back unless the state moved on (code review 10 Nov).
-  if (last.state === "done" && !last.quiet && !last.recall) doneBubble(last, true);
-  else if (last.state === "done" || last.recall) {
+  const bubbled = last.state === "done" || last.state === "error";
+  if (bubbled && !last.quiet && !last.recall) doneBubble(last, true);
+  else if (bubbled || last.recall) {
     const was = last;
     sprout.say(showText ? "Message text on" : "Message text off", true, TOGGLE_FOR, null);
     clearTimeout(toggleTimer);
@@ -115,19 +116,22 @@ function speak() {
 // done" and the project for about 5 s, no x (Rust hides it). The peek's recall:
 // "All done, <time>. Click me to open your session". Without a known app a
 // click cannot open anything, so no hint. Only said again when it changes.
+// An error has the same bubble, x and peek (Mohamed, 18 Nov), with
+// "Something went wrong" and the error's text; it is never quiet.
 let doneSaid = "";
 function doneBubble(s, force) {
   const hint = s.app ? ". Click me to open your session" : "";
   const more = s.more ? `+${s.more} more finished` : null;
+  const said = s.error ? "Something went wrong" : "All done";
   let line, detail;
   if (s.recall) {
-    line = `All done, ${s.recall}${hint}`;
+    line = `${said}, ${s.recall}${hint}`;
     detail = [s.project, more];
   } else if (s.quiet) {
-    line = "All done";
+    line = said;
     detail = [s.project];
   } else {
-    line = `All done${hint}`;
+    line = `${said}${hint}`;
     detail = [s.project, more, showText ? s.text : null];
   }
   detail = detail.filter(Boolean);
@@ -201,9 +205,10 @@ listen("blip-state", (event) => {
   const s = event.payload;
   last = s;
   const { text } = s;
-  // Rust's "peek" is Sprout in done, peeking (setPeek); its recall comes back down.
+  // Rust's "peek" is Sprout in done (or error), peeking (setPeek); its recall comes back down.
   const peeking = s.state === "peek" && !s.recall;
-  const state = s.state === "peek" ? "done" : NAMES[s.state] || s.state;
+  const finish = s.error ? "error" : "done";
+  const state = s.state === "peek" ? finish : NAMES[s.state] || s.state;
   lastText = text;
   if (peeking) sprout.setPeek(true); // first, so going back to the peek is not a new done hop
   sprout.setState(state);
@@ -216,7 +221,7 @@ listen("blip-state", (event) => {
     spoke = { state: "", text: null, at: -Infinity };
     doneSaid = "";
   }
-  if (state === "done" && !peeking) doneBubble(s);
+  if ((state === "done" || state === "error") && !peeking) doneBubble(s);
   else doneSaid = "";
   const repeat = spoke.state === state && spoke.text === text && now - spoke.at < REPEAT_GAP;
   if (SPEAKS.includes(state) && !repeat) {
