@@ -350,8 +350,11 @@ mod tests {
     }
 
     // On this PC, live: the readings answer, and the walk up from this test
-    // reaches its parent (cargo), which started before it.
+    // reaches its parent (cargo), which started before it. Depends on the
+    // desktop and on who started the tests (code review 15 Nov), so it only
+    // runs on request: cargo test -- --ignored
     #[test]
+    #[ignore = "reads the live PC; run with --ignored"]
     fn reads_this_pc() {
         assert!(idle_seconds().is_some());
         let me = std::process::id() as i32;
