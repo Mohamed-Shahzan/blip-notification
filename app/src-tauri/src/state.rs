@@ -12,6 +12,11 @@ use std::collections::{HashMap, VecDeque};
 pub const DONE_FOR: f64 = 5.0;
 // The session's app in front, with the user active, this long counts as checked.
 const CHECK_AFTER: f64 = 2.0;
+// While the Done bubble is still open (the user has not closed it to the peek),
+// being in the session's app counts as reading it only after this long, counted
+// from when the user came back (Mohamed, 19 Nov): after the lock screen 2 s was
+// too short to read it. Once the x has closed it to the peek, CHECK_AFTER again.
+const READ_AFTER: f64 = 20.0;
 // A session whose app was not found (a failed ps, a process tree with no app)
 // is looked up again after this many seconds, three times longer after each
 // miss, at most APP_RETRY_MAX apart (code review 10 Nov: ssh or tmux sessions
@@ -537,9 +542,10 @@ impl Machine {
     fn tick(&mut self, now: f64) {
         let presence = self.presence;
         let read_at = self.read_at;
-        let checked = presence
-            .filter(|p| p.active && now - self.presence_since >= CHECK_AFTER)
-            .and_then(|p| p.front);
+        // The app in front and the user active, and for how long: presence_since
+        // moves whenever the front app, or the user coming or going, changes.
+        let here = presence.filter(|p| p.active).and_then(|p| p.front);
+        let here_for = now - self.presence_since;
         for s in self.sessions.values_mut() {
             let app = s.app.as_ref().map(|a| a.pid);
             let Some(f) = &mut s.finished else { continue };
@@ -555,7 +561,10 @@ impl Machine {
             }
             let over = match f.quiet {
                 Some(true) => now >= f.at + SETTLE + DONE_FOR,
-                Some(false) => !f.error && checked.is_some() && checked == app,
+                Some(false) => {
+                    let needed = if f.bubble { READ_AFTER } else { CHECK_AFTER };
+                    !f.error && here.is_some() && here == app && here_for >= needed
+                }
                 None => false,
             };
             if over {
@@ -1112,15 +1121,55 @@ mod tests {
         assert!(!m.needs_presence());
     }
 
+    // Mohamed, 19 Nov: coming back from the lock screen, a Done bubble was gone
+    // after 2 s, too soon to read. It now waits 20 s from when the user is back.
     #[test]
-    fn coming_back_while_the_bubble_shows_clears_it_too() {
+    fn coming_back_while_the_bubble_shows_waits_twenty_seconds() {
         let mut m = Machine::default();
         finished_at_10(&mut m);
         m.set_presence(here(CLAUDE, false), 10.0);
         assert_eq!(state_after(&mut m, 10.25), State::Done);
-        m.set_presence(here(CLAUDE, true), 100.0); // the user is back
-        assert_eq!(state_after(&mut m, 101.0), State::Done);
+        m.set_presence(here(CLAUDE, true), 3600.0); // an hour later the user is back
+        assert_eq!(state_after(&mut m, 3602.0), State::Done, "not 2 s");
+        assert_eq!(state_after(&mut m, 3619.0), State::Done, "not yet 20 s");
+        assert_eq!(state_after(&mut m, 3620.0), State::Hidden);
+        assert!(!m.needs_presence());
+    }
+
+    #[test]
+    fn leaving_the_app_before_twenty_seconds_starts_the_count_again() {
+        let mut m = Machine::default();
+        finished_at_10(&mut m);
+        m.set_presence(here(NOTES, true), 10.0);
+        assert_eq!(state_after(&mut m, 10.25), State::Done);
+        m.set_presence(here(CLAUDE, true), 100.0);
+        m.set_presence(here(NOTES, true), 115.0); // a quick look, then away again
+        m.set_presence(here(CLAUDE, true), 120.0);
+        assert_eq!(state_after(&mut m, 139.0), State::Done);
+        assert_eq!(state_after(&mut m, 140.0), State::Hidden);
+    }
+
+    // The x is the user saying "seen": the peek needs only the short time.
+    #[test]
+    fn after_the_x_the_peek_clears_after_two_seconds_in_the_app() {
+        let mut m = Machine::default();
+        finished_at_10(&mut m);
+        m.set_presence(here(NOTES, true), 10.0);
+        assert_eq!(state_after(&mut m, 10.25), State::Done);
+        m.close_bubble();
+        m.set_presence(here(CLAUDE, true), 100.0);
+        assert_eq!(state_after(&mut m, 101.0), State::Peek);
         assert_eq!(state_after(&mut m, 102.0), State::Hidden);
+    }
+
+    #[test]
+    fn a_click_on_the_bubble_still_clears_it_at_once() {
+        let mut m = Machine::default();
+        finished_at_10(&mut m);
+        m.set_presence(here(NOTES, true), 10.0);
+        assert_eq!(state_after(&mut m, 10.25), State::Done);
+        m.checked_app(CLAUDE); // the click opened the session's app
+        assert_eq!(state_after(&mut m, 11.0), State::Hidden);
     }
 
     #[test]
