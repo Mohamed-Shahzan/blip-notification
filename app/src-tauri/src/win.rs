@@ -93,13 +93,17 @@ pub fn screen_locked() -> Option<bool> {
     if ok == 0 || buffer.is_null() {
         return None;
     }
-    // Safety: Windows filled the buffer with a WTSINFOEXW; copy it, then free it.
-    let info = unsafe { *(buffer as *const WTSINFOEXW) };
+    // Only read a buffer that is as big as the record (code review 18 Nov),
+    // copy what is needed, then free it.
+    let flags = if size as usize >= size_of::<WTSINFOEXW>() {
+        // Safety: Windows filled at least size_of::<WTSINFOEXW>() bytes.
+        let info = unsafe { &*(buffer as *const WTSINFOEXW) };
+        (info.Level == 1).then_some(unsafe { info.Data.WTSInfoExLevel1.SessionFlags } as u32)
+    } else {
+        None
+    };
     unsafe { WTSFreeMemory(buffer as *mut c_void) };
-    if info.Level != 1 || (size as usize) < size_of::<WTSINFOEXW>() {
-        return None;
-    }
-    locked_from_flags(unsafe { info.Data.WTSInfoExLevel1.SessionFlags } as u32)
+    locked_from_flags(flags?)
 }
 
 fn locked_from_flags(flags: u32) -> Option<bool> {
@@ -162,10 +166,20 @@ unsafe extern "system" fn display_changed(
     0
 }
 
-// True only when Windows said the display is off. Dimmed still counts as
-// there: Windows dims a short while before turning the display off.
-pub fn display_asleep() -> bool {
-    DISPLAY.load(Ordering::Relaxed) == 0
+// True only when Windows said the display is off and the user has not touched
+// the mouse or keyboard just now. Input wakes a display, so it is not asleep
+// when the user is there, even if the "on" report was missed (code review 18
+// Nov). Dimmed still counts as there: Windows dims a short while before it
+// turns the display off.
+pub fn display_asleep(idle_seconds: f64) -> bool {
+    display_off(DISPLAY.load(Ordering::Relaxed), idle_seconds)
+}
+
+// How long without input before a reported "off" is believed.
+const WOKEN_BY_INPUT: f64 = 3.0;
+
+fn display_off(reported: u8, idle_seconds: f64) -> bool {
+    reported == 0 && idle_seconds >= WOKEN_BY_INPUT
 }
 
 // The app with this process id, if it is a window app: one with a window on
@@ -380,6 +394,18 @@ mod tests {
         // Last input 1 s before the 49.7-day rollover, now 2 s after it.
         assert_eq!(idle_between(2_000, u32::MAX - 999), 3.0);
         assert_eq!(idle_between(5, 5), 0.0);
+    }
+
+    #[test]
+    fn a_display_reported_off_is_believed_only_while_nobody_is_there() {
+        assert!(display_off(0, 60.0));
+        assert!(
+            !display_off(0, 0.5),
+            "input wakes it, even if 'on' was missed"
+        );
+        assert!(!display_off(1, 60.0), "on");
+        assert!(!display_off(2, 60.0), "dimmed");
+        assert!(!display_off(DISPLAY_UNKNOWN, 60.0), "no report yet");
     }
 
     #[test]

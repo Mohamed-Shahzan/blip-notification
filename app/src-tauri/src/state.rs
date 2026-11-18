@@ -26,7 +26,7 @@ const SETTLE: f64 = 0.2;
 // The quiet decision waits for a reading of what the user is doing taken after
 // the finish (code review 10 Nov), at most this long after SETTLE. Without one
 // (a failed read) it is the full flow. Only where presence can be read
-// (Machine::reads_presence; the Mac for now): elsewhere it decides at SETTLE.
+// (Machine::reads_presence; the Mac and Windows): elsewhere it decides at SETTLE.
 const PRESENCE_WAIT: f64 = 1.0;
 
 // Claude Code's own bookkeeping tools, not work the user cares about.
@@ -523,7 +523,7 @@ impl Machine {
             .any(|s| s.finished.as_ref().is_some_and(|f| !f.error))
     }
 
-    // What the user is doing now (Mac: front app, idle time, lock).
+    // What the user is doing now (Mac and Windows: front app, idle time, lock, display).
     pub fn set_presence(&mut self, presence: Option<Presence>, now: f64) {
         if presence != self.presence {
             self.presence = presence;

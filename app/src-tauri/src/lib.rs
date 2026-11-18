@@ -431,9 +431,10 @@ fn read_presence(app: &AppHandle) -> Option<state::Presence> {
         && mac::screen_locked() != Some(true)
         && !mac::display_asleep();
     #[cfg(windows)]
-    let active = win::idle_seconds()? < ACTIVE_WITHIN
-        && win::screen_locked() != Some(true)
-        && !win::display_asleep();
+    let active = {
+        let idle = win::idle_seconds()?;
+        idle < ACTIVE_WITHIN && win::screen_locked() != Some(true) && !win::display_asleep(idle)
+    };
     Some(state::Presence { front, active })
 }
 #[cfg(not(any(target_os = "macos", windows)))]
