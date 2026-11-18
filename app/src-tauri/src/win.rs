@@ -1,8 +1,11 @@
-// Windows only: the front app, the app a session runs in, idle time and
-// bringing an app forward. The counterpart of mac.rs (Windows Level 1, 14 Nov
-// 2026). Plain Win32 calls from windows-sys; none asks for a permission.
+// Windows only: the front app, the app a session runs in, idle time, the
+// locked screen, a sleeping display and bringing an app forward. The
+// counterpart of mac.rs (Windows Level 1, 14 and 18 Nov 2026). Plain Win32
+// calls from windows-sys; none asks for a permission.
 
+use std::ffi::c_void;
 use std::ptr::null_mut;
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use windows_sys::Win32::Foundation::{
     CloseHandle, FILETIME, HANDLE, HWND, INVALID_HANDLE_VALUE, LPARAM,
@@ -10,16 +13,24 @@ use windows_sys::Win32::Foundation::{
 use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
 };
+use windows_sys::Win32::System::Power::{
+    DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS, POWERBROADCAST_SETTING, PowerSettingRegisterNotification,
+};
+use windows_sys::Win32::System::RemoteDesktop::{
+    WTS_CURRENT_SERVER_HANDLE, WTS_CURRENT_SESSION, WTS_SESSIONSTATE_LOCK, WTS_SESSIONSTATE_UNLOCK,
+    WTSFreeMemory, WTSINFOEXW, WTSQuerySessionInformationW, WTSSessionInfoEx,
+};
 use windows_sys::Win32::System::SystemInformation::GetTickCount;
+use windows_sys::Win32::System::SystemServices::GUID_SESSION_DISPLAY_STATUS;
 use windows_sys::Win32::System::Threading::{
     GetProcessTimes, OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
     QueryFullProcessImageNameW,
 };
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GW_OWNER, GWL_EXSTYLE, GetForegroundWindow, GetWindow, GetWindowLongW,
-    GetWindowThreadProcessId, IsIconic, IsWindowVisible, SW_RESTORE, SetForegroundWindow,
-    ShowWindow, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
+    DEVICE_NOTIFY_CALLBACK, EnumWindows, GW_OWNER, GWL_EXSTYLE, GetForegroundWindow, GetWindow,
+    GetWindowLongW, GetWindowThreadProcessId, IsIconic, IsWindowVisible, PBT_POWERSETTINGCHANGE,
+    SW_RESTORE, SetForegroundWindow, ShowWindow, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
 };
 
 use crate::state::App;
@@ -61,6 +72,100 @@ pub fn idle_seconds() -> Option<f64> {
 // every 49.7 days; wrapping_sub keeps the difference right across it.
 fn idle_between(now: u32, last_input: u32) -> f64 {
     now.wrapping_sub(last_input) as f64 / 1000.0
+}
+
+// Whether this user's session is locked. None when Windows gives no answer.
+// SessionFlags is reversed only on Windows 7 and Server 2008 R2 (Microsoft
+// Learn, WTSINFOEX_LEVEL1_W), which Blip does not support. Tested on this PC
+// (18 Nov): unlocked, Windows + L gave locked, signing in gave unlocked.
+pub fn screen_locked() -> Option<bool> {
+    let mut buffer = null_mut();
+    let mut size = 0u32;
+    let ok = unsafe {
+        WTSQuerySessionInformationW(
+            WTS_CURRENT_SERVER_HANDLE,
+            WTS_CURRENT_SESSION,
+            WTSSessionInfoEx,
+            &mut buffer,
+            &mut size,
+        )
+    };
+    if ok == 0 || buffer.is_null() {
+        return None;
+    }
+    // Safety: Windows filled the buffer with a WTSINFOEXW; copy it, then free it.
+    let info = unsafe { *(buffer as *const WTSINFOEXW) };
+    unsafe { WTSFreeMemory(buffer as *mut c_void) };
+    if info.Level != 1 || (size as usize) < size_of::<WTSINFOEXW>() {
+        return None;
+    }
+    locked_from_flags(unsafe { info.Data.WTSInfoExLevel1.SessionFlags } as u32)
+}
+
+fn locked_from_flags(flags: u32) -> Option<bool> {
+    match flags {
+        WTS_SESSIONSTATE_LOCK => Some(true),
+        WTS_SESSIONSTATE_UNLOCK => Some(false),
+        _ => None, // WTS_SESSIONSTATE_UNKNOWN
+    }
+}
+
+// The display, as Windows last reported it: 0 off, 1 on, 2 dimmed (Microsoft
+// Learn, power setting GUIDs). Unknown until the first report.
+const DISPLAY_UNKNOWN: u8 = u8::MAX;
+static DISPLAY: AtomicU8 = AtomicU8::new(DISPLAY_UNKNOWN);
+
+// Asks Windows to report the display's state, once, at start. Windows calls
+// back straight away with the current value, then on every change (Microsoft
+// Learn, PowerSettingRegisterNotification). The session display status is the
+// one meant for apps in the user's session. Kept for the whole life of Blip.
+pub fn watch_display() {
+    let params: &'static mut DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS =
+        Box::leak(Box::new(DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS {
+            Callback: Some(display_changed),
+            Context: null_mut(),
+        }));
+    let mut handle = null_mut();
+    let error = unsafe {
+        PowerSettingRegisterNotification(
+            &GUID_SESSION_DISPLAY_STATUS,
+            DEVICE_NOTIFY_CALLBACK,
+            params as *mut DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS as *mut c_void,
+            &mut handle,
+        )
+    };
+    if error != 0 {
+        eprintln!("blip: cannot watch the display: {error}");
+    }
+}
+
+unsafe extern "system" fn display_changed(
+    _: *const c_void,
+    kind: u32,
+    setting: *const c_void,
+) -> u32 {
+    if kind != PBT_POWERSETTINGCHANGE || setting.is_null() {
+        return 0;
+    }
+    // Safety: for PBT_POWERSETTINGCHANGE, setting is a POWERBROADCAST_SETTING
+    // whose Data holds DataLength bytes, here a 32-bit value.
+    let setting = setting as *const POWERBROADCAST_SETTING;
+    if unsafe { (*setting).DataLength } < 4 {
+        return 0;
+    }
+    let value = unsafe {
+        std::ptr::addr_of!((*setting).Data)
+            .cast::<u32>()
+            .read_unaligned()
+    };
+    DISPLAY.store(value.min(DISPLAY_UNKNOWN as u32) as u8, Ordering::Relaxed);
+    0
+}
+
+// True only when Windows said the display is off. Dimmed still counts as
+// there: Windows dims a short while before turning the display off.
+pub fn display_asleep() -> bool {
+    DISPLAY.load(Ordering::Relaxed) == 0
 }
 
 // The app with this process id, if it is a window app: one with a window on
@@ -278,6 +383,25 @@ mod tests {
     }
 
     #[test]
+    fn reads_the_lock_flags() {
+        assert_eq!(locked_from_flags(0), Some(true));
+        assert_eq!(locked_from_flags(1), Some(false));
+        assert_eq!(locked_from_flags(u32::MAX), None, "unknown");
+    }
+
+    // The probe that first read the lock (18 Nov) took SessionFlags from byte
+    // 12 and always saw "locked": the record holds 64-bit times, so it starts
+    // at 8, and SessionFlags is at 16. Reading through the windows-sys types
+    // keeps the right place; this checks it.
+    #[test]
+    fn the_lock_flag_is_where_windows_puts_it() {
+        use windows_sys::Win32::System::RemoteDesktop::WTSINFOEX_LEVEL1_W;
+        let at = std::mem::offset_of!(WTSINFOEXW, Data)
+            + std::mem::offset_of!(WTSINFOEX_LEVEL1_W, SessionFlags);
+        assert_eq!(at, 16);
+    }
+
+    #[test]
     fn follows_the_taskbar_rule() {
         assert!(on_taskbar(true, false, 0));
         assert!(!on_taskbar(false, false, 0), "hidden");
@@ -357,6 +481,7 @@ mod tests {
     #[ignore = "reads the live PC; run with --ignored"]
     fn reads_this_pc() {
         assert!(idle_seconds().is_some());
+        assert_eq!(screen_locked(), Some(false), "run while signed in");
         let me = std::process::id() as i32;
         let up = parent(me).expect("cargo starts the tests, and it is older");
         assert_ne!(up, me);

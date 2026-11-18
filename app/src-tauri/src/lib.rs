@@ -103,8 +103,11 @@ pub fn run() {
             let mut machine = state::Machine::default();
             let home = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
             machine.set_home(std::env::var(home).ok());
-            // Windows reads it in the Windows batch (read_presence).
-            machine.set_reads_presence(cfg!(target_os = "macos"));
+            // Both read what the user is doing (read_presence): the quiet
+            // decision waits for a reading taken after the finish.
+            machine.set_reads_presence(cfg!(any(target_os = "macos", windows)));
+            #[cfg(windows)]
+            win::watch_display();
             app.manage(Mutex::new(machine));
             let handle = app.handle().clone();
             thread::spawn(move || listen(handle));
@@ -427,10 +430,10 @@ fn read_presence(app: &AppHandle) -> Option<state::Presence> {
     let active = mac::idle_seconds() < ACTIVE_WITHIN
         && mac::screen_locked() != Some(true)
         && !mac::display_asleep();
-    // Idle time only so far: the locked screen and a sleeping display are the
-    // next Windows step (Windows Level 1, 14 Nov).
     #[cfg(windows)]
-    let active = win::idle_seconds()? < ACTIVE_WITHIN;
+    let active = win::idle_seconds()? < ACTIVE_WITHIN
+        && win::screen_locked() != Some(true)
+        && !win::display_asleep();
     Some(state::Presence { front, active })
 }
 #[cfg(not(any(target_os = "macos", windows)))]
