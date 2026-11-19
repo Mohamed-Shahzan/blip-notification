@@ -6,24 +6,35 @@ YOU MAY
 
 - Download, install and use Blip on your own computers, for any purpose,
   including at work.
-- Make the copies needed to install, build and run Blip on your own
-  computers, for example with git clone or a Claude Code plugin install.
-- Use an AI assistant (such as Claude Code) to install or run it.
-- Read the code and link to this repository.
-- Suggest changes to this repository through GitHub issues or pull requests.
-  By sending a change you allow Mohamed to use, change and publish it as part
-  of Blip under these terms.
+- Make the copies that come with normal use: installing, building and
+  updating Blip (for example git clone, git pull or a Claude Code plugin
+  install), and backing up or syncing your own copy between your own
+  computers.
+- Read the code, link to this repository, and use an AI assistant (such as
+  Claude Code) to install, run, read or work on Blip for the uses allowed
+  here.
+- Suggest changes: fork this repository on GitHub, change your fork, and
+  send the changes back as a pull request, or describe them in a GitHub
+  issue.
+
+
+CONTRIBUTIONS
+
+When you send a change, you confirm that you have the right to send it, and
+you allow Mohamed to use, change, publish and license it as part of Blip,
+under these terms or any later terms Mohamed chooses.
 
 
 YOU MAY NOT, WITHOUT WRITTEN PERMISSION FROM MOHAMED
 
 - Copy the code, in whole or in part, into another project.
-- Change the code and share, publish or sell the changed version, other than
-  in a pull request to this repository.
+- Publish, share or sell a changed version of the code or of the app, other
+  than a fork used only to send a pull request to this repository.
 - Share, publish or sell copies of the code or of the app. Share a link to
   this repository instead.
 - Use the code, the Sprout character or this repository to train, fine-tune
-  or evaluate AI models, or include them in any dataset.
+  or evaluate AI models, or include them in any dataset. Using an AI
+  assistant as allowed above is not training.
 
 A fork of this repository on GitHub, which GitHub's Terms of Service allow,
 is only for viewing the code and sending pull requests. It does not allow

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Copyright (c) 2026 Mohamed. All rights reserved. See LICENSE.
+# Copyright (c) 2026 Mohamed. All rights reserved. See LICENSE at https://github.com/Mohamed-Shahzan/blip-notification
 # Sends one hook event (JSON on stdin) to Blip on 127.0.0.1. Runs as an async
 # hook, so Claude never waits for it. curl gives up after 2 s because Claude
 # Code does not enforce `timeout` on async command hooks. Always exits 0.
