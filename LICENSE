@@ -6,22 +6,28 @@ YOU MAY
 
 - Download, install and use Blip on your own computers, for any purpose,
   including at work.
-- Build Blip from this source code for your own use, and use an AI assistant
-  (such as Claude Code) to install or run it.
+- Make the copies needed to install, build and run Blip on your own
+  computers, for example with git clone or a Claude Code plugin install.
+- Use an AI assistant (such as Claude Code) to install or run it.
 - Read the code and link to this repository.
+- Suggest changes to this repository through GitHub issues or pull requests.
+  By sending a change you allow Mohamed to use, change and publish it as part
+  of Blip under these terms.
 
 
 YOU MAY NOT, WITHOUT WRITTEN PERMISSION FROM MOHAMED
 
 - Copy the code, in whole or in part, into another project.
-- Change the code and share, publish or sell the changed version.
+- Change the code and share, publish or sell the changed version, other than
+  in a pull request to this repository.
 - Share, publish or sell copies of the code or of the app. Share a link to
   this repository instead.
 - Use the code, the Sprout character or this repository to train, fine-tune
   or evaluate AI models, or include them in any dataset.
 
-Forking this repository on GitHub, which GitHub's Terms of Service allow,
-does not give any of the rights listed above.
+A fork of this repository on GitHub, which GitHub's Terms of Service allow,
+is only for viewing the code and sending pull requests. It does not allow
+any of the things listed under YOU MAY NOT.
 
 
 SPROUT PICTURES AND VIDEOS
