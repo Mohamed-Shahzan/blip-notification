@@ -101,4 +101,4 @@ Blip only listens on `127.0.0.1`, so nothing leaves your Mac. Claude's last repl
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+Blip and Sprout by Mohamed. Free to use, including at work. The code may not be copied, changed, shared or used for AI training. Pictures and videos of Sprout may be shared with credit (CC BY-ND 4.0). See [LICENSE](LICENSE).

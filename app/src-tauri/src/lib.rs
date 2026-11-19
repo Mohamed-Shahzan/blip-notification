@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Mohamed. All rights reserved. See LICENSE.
 // Phase 0c placeholder window (transparent, always on top, click-through, top
 // centre) with the Phase 1 bridge: hook events arrive on 127.0.0.1, mod events
 // as small files in ~/.blip/inbox. Events go to logs/received.jsonl only in a

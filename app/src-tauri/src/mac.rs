@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Mohamed. All rights reserved. See LICENSE.
 // Mac only: the front app, the app a session runs in, idle time and the
 // locked screen. None of these ask for a permission (tested 9 Nov 2026,
 // macOS 27.2, see the daily log).

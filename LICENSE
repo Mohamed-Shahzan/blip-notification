@@ -1,21 +1,49 @@
-MIT License
+Blip and Sprout
+Copyright (c) 2026 Mohamed. All rights reserved.
 
-Copyright (c) 2026 Mohamed
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+YOU MAY
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+- Download, install and use Blip on your own computers, for any purpose,
+  including at work.
+- Build Blip from this source code for your own use, and use an AI assistant
+  (such as Claude Code) to install or run it.
+- Read the code and link to this repository.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+
+YOU MAY NOT, WITHOUT WRITTEN PERMISSION FROM MOHAMED
+
+- Copy the code, in whole or in part, into another project.
+- Change the code and share, publish or sell the changed version.
+- Share, publish or sell copies of the code or of the app. Share a link to
+  this repository instead.
+- Use the code, the Sprout character or this repository to train, fine-tune
+  or evaluate AI models, or include them in any dataset.
+
+Forking this repository on GitHub, which GitHub's Terms of Service allow,
+does not give any of the rights listed above.
+
+
+SPROUT PICTURES AND VIDEOS
+
+Pictures and videos of Sprout (screenshots, screen recordings, exported
+images) are licensed under the Creative Commons Attribution-NoDerivatives
+4.0 International licence (CC BY-ND 4.0):
+https://creativecommons.org/licenses/by-nd/4.0/
+
+You may share them anywhere, also commercially, with the credit
+"Sprout by Mohamed" and without changing them. This does not cover the code
+that draws Sprout (character/sprout.js), which falls under the rules above.
+
+
+EARLIER VERSIONS
+
+Versions of Blip published before 19 November 2026 were released under the
+MIT licence, which still applies to copies of those versions.
+
+
+NO WARRANTY
+
+Blip is provided "as is", without warranty of any kind, express or implied.
+In no event shall the author be liable for any claim, damages or other
+liability arising from Blip or its use.

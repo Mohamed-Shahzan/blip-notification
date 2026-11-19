@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Mohamed. All rights reserved. See LICENSE.
 // Blip mod. Tells Blip how each turn ended, which settings hooks miss after
 // Esc and after a Deny (Phase 0 tests 5, 8, 9, 11).
 //

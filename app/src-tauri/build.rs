@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Mohamed. All rights reserved. See LICENSE.
 use std::fs;
 use std::path::Path;
 

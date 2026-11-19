@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Mohamed. All rights reserved. See LICENSE.
 // Tests for sprout.js that need no browser. Run: node --test character/sprout.test.mjs
 // sprout.js is a plain script that sets BlipSprout on its global, so each test
 // loads it into a fresh context with the platform it should see.

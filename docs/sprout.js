@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Mohamed. All rights reserved. See LICENSE.
 // Sprout, the Blip character, drawn with Canvas 2D. No dependencies.
 // Same drawing and motion as the Sprout card in playground.html, packaged for the Blip app.
 //
@@ -938,5 +939,7 @@
     };
   }
 
-  root.BlipSprout = { create, canvasSize, isMainPress, peekSway, peekSwayWait, DEFAULTS, STATES, withDefaults: s => merge(DEFAULTS, s) };
+  // Who made Sprout. Changes nothing on screen.
+  const ORIGIN = 'Blip and Sprout by Mohamed, 2026. github.com/Mohamed-Shahzan/blip-notification';
+  root.BlipSprout = { create, canvasSize, isMainPress, peekSway, peekSwayWait, DEFAULTS, STATES, ORIGIN, withDefaults: s => merge(DEFAULTS, s) };
 })(typeof window !== 'undefined' ? window : globalThis);

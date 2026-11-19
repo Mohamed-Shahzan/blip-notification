@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Mohamed. All rights reserved. See LICENSE.
 // Turns hook and mod messages into what Blip shows.
 //
 // translate() reads one message and keeps only what matters for the state.

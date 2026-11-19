@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Mohamed. All rights reserved. See LICENSE.
 // Windows only: the front app, the app a session runs in, idle time, the
 // locked screen, a sleeping display and bringing an app forward. The
 // counterpart of mac.rs (Windows Level 1, 14 and 18 Nov 2026). Plain Win32

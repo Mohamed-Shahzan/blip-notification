@@ -1,3 +1,4 @@
+// Copyright (c) 2026 Mohamed. All rights reserved. See LICENSE.
 // Sprout follows the state Blip's Rust side sends as "blip-state".
 const { listen, emit } = window.__TAURI__.event;
 
