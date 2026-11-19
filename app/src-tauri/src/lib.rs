@@ -7,6 +7,8 @@
 #[cfg(target_os = "macos")]
 mod mac;
 mod state;
+#[cfg(windows)]
+mod win;
 
 use serde::Deserialize;
 use std::collections::HashSet;
@@ -42,7 +44,7 @@ const PRESENCE_POLL: f64 = 0.5;
 // The user counts as active with mouse or keyboard input this recently. 5 min,
 // not 1: watching Claude work without touching anything is still being there
 // (Mohamed's test, 9 Nov). A locked screen or a sleeping display is away at once.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 const ACTIVE_WITHIN: f64 = 300.0;
 
 // The state thread, woken after each event so it can plan its next wake.
@@ -101,8 +103,11 @@ pub fn run() {
             let mut machine = state::Machine::default();
             let home = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
             machine.set_home(std::env::var(home).ok());
-            // Windows reads it in the Windows batch (read_presence).
-            machine.set_reads_presence(cfg!(target_os = "macos"));
+            // Both read what the user is doing (read_presence): the quiet
+            // decision waits for a reading taken after the finish.
+            machine.set_reads_presence(cfg!(any(target_os = "macos", windows)));
+            #[cfg(windows)]
+            win::watch_display();
             app.manage(Mutex::new(machine));
             let handle = app.handle().clone();
             thread::spawn(move || listen(handle));
@@ -159,6 +164,14 @@ fn handle(mut request: Request, app: AppHandle) {
     // Answer as soon as the message is read, before any other work,
     // so Claude Code never waits on Blip.
     let url = request.url().to_string();
+    // Windows: the hook sends its own process (Git Bash cannot see its
+    // parent). Walk up to the session's Claude process now, while the hook
+    // still waits for this answer: it ends right after. One process list, a
+    // few ms, and Claude never waits (the hook runs in the background).
+    #[cfg(windows)]
+    let session_pid = query_value(&url, "winpid")
+        .and_then(|v| v.parse().ok())
+        .and_then(win::session_process);
     let _ = request.respond(Response::empty(200));
 
     // Parse once; the slower name search only runs for a broken or cut-off message.
@@ -176,9 +189,10 @@ fn handle(mut request: Request, app: AppHandle) {
         "winpid": query_value(&url, "winpid"),
         "event": event,
     }));
-    // Git Bash numbers its own processes, so on Windows only winpid is a real process id.
-    let pid_key = if cfg!(windows) { "winpid" } else { "pid" };
-    let pid = query_value(&url, pid_key).and_then(|v| v.parse().ok());
+    #[cfg(windows)]
+    let pid = session_pid;
+    #[cfg(not(windows))]
+    let pid = query_value(&url, "pid").and_then(|v| v.parse().ok());
     let sent = query_value(&url, "ts").and_then(|v| v.parse().ok());
     let event = state::translate("hook", &event).map(|e| e.with_process(pid, sent));
     update_state(&app, event);
@@ -409,24 +423,37 @@ fn on_main<T: Send + 'static>(
 
 // The front app (never Blip: then the app before it), idle time and lock.
 // None when the front app could not be read: Blip then acts as if it does not know.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 fn read_presence(app: &AppHandle) -> Option<state::Presence> {
     let front = remember_front(app)?;
+    #[cfg(target_os = "macos")]
     let active = mac::idle_seconds() < ACTIVE_WITHIN
         && mac::screen_locked() != Some(true)
         && !mac::display_asleep();
+    #[cfg(windows)]
+    let active = {
+        let idle = win::idle_seconds()?;
+        idle < ACTIVE_WITHIN && win::screen_locked() != Some(true) && !win::display_asleep(idle)
+    };
     Some(state::Presence { front, active })
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 fn read_presence(_app: &AppHandle) -> Option<state::Presence> {
-    None // Windows: GetForegroundWindow and GetLastInputInfo, in the Windows batch
+    None
 }
 
 // Reads the front app and, unless it is Blip, keeps it as LAST_FRONT. Returns
 // the front app with Blip replaced by the one before it; None if it failed.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", windows))]
 fn remember_front(app: &AppHandle) -> Option<Option<i32>> {
+    #[cfg(target_os = "macos")]
     let front = on_main(app, mac::front_app)?;
+    // Windows answers on any thread, so no trip to the main thread.
+    #[cfg(windows)]
+    let front = {
+        let _ = app;
+        win::front_app()
+    };
     let mut last = LAST_FRONT.lock().unwrap_or_else(|p| p.into_inner());
     if front == Some(std::process::id() as i32) {
         return Some(*last);
@@ -436,7 +463,7 @@ fn remember_front(app: &AppHandle) -> Option<Option<i32>> {
     }
     Some(front)
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 fn remember_front(_app: &AppHandle) -> Option<Option<i32>> {
     None
 }
@@ -445,18 +472,28 @@ fn remember_front(_app: &AppHandle) -> Option<Option<i32>> {
 fn bring_forward(app: &AppHandle, pid: i32) -> bool {
     on_main(app, move || mac::bring_forward(pid)).unwrap_or(false)
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(windows)]
+fn bring_forward(_app: &AppHandle, pid: i32) -> bool {
+    win::bring_forward(pid)
+}
+#[cfg(not(any(target_os = "macos", windows)))]
 fn bring_forward(_app: &AppHandle, _pid: i32) -> bool {
     false
 }
 
 // The app a session runs in: up from its Claude process to the first regular
-// app (RESEARCH.md, Session 9: zsh, claude, disclaimer, then Claude).
-#[cfg(target_os = "macos")]
+// app (RESEARCH.md, Session 9: zsh, claude, disclaimer, then Claude). On
+// Windows the first app with a taskbar window (claude.exe sits under
+// Antigravity IDE.exe).
+#[cfg(any(target_os = "macos", windows))]
 fn find_app(pid: u32) -> Option<state::App> {
+    #[cfg(target_os = "macos")]
+    let (regular_app, parent) = (mac::regular_app, parent);
+    #[cfg(windows)]
+    let (regular_app, parent) = (win::regular_app, win::parent);
     let mut pid = pid as i32;
     for _ in 0..32 {
-        if let Some(found) = mac::regular_app(pid) {
+        if let Some(found) = regular_app(pid) {
             return Some(found);
         }
         pid = parent(pid)?;
@@ -466,7 +503,7 @@ fn find_app(pid: u32) -> Option<state::App> {
     }
     None
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", windows)))]
 fn find_app(_pid: u32) -> Option<state::App> {
     None
 }

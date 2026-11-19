@@ -12,6 +12,11 @@ use std::collections::{HashMap, VecDeque};
 pub const DONE_FOR: f64 = 5.0;
 // The session's app in front, with the user active, this long counts as checked.
 const CHECK_AFTER: f64 = 2.0;
+// While the Done bubble is still open (the user has not closed it to the peek),
+// being in the session's app counts as reading it only after this long, counted
+// from when the user came back (Mohamed, 19 Nov): after the lock screen 2 s was
+// too short to read it. Once the x has closed it to the peek, CHECK_AFTER again.
+const READ_AFTER: f64 = 20.0;
 // A session whose app was not found (a failed ps, a process tree with no app)
 // is looked up again after this many seconds, three times longer after each
 // miss, at most APP_RETRY_MAX apart (code review 10 Nov: ssh or tmux sessions
@@ -26,7 +31,7 @@ const SETTLE: f64 = 0.2;
 // The quiet decision waits for a reading of what the user is doing taken after
 // the finish (code review 10 Nov), at most this long after SETTLE. Without one
 // (a failed read) it is the full flow. Only where presence can be read
-// (Machine::reads_presence; the Mac for now): elsewhere it decides at SETTLE.
+// (Machine::reads_presence; the Mac and Windows): elsewhere it decides at SETTLE.
 const PRESENCE_WAIT: f64 = 1.0;
 
 // Claude Code's own bookkeeping tools, not work the user cares about.
@@ -47,11 +52,14 @@ const REMEMBER: usize = 64;
 pub enum State {
     #[default]
     Hidden,
-    // Sprout peeking under the notch: a finished session not checked yet.
+    // Sprout peeking under the notch: a finished session (Done or error) not checked yet.
     Peek,
     Done,
-    Working,
+    // Above Done (an error the user has not seen outranks a finish) but below
+    // Working since 18 Nov: it waits while other sessions work, so one old
+    // error no longer hides all new work.
     Error,
+    Working,
     NeedsYou,
 }
 
@@ -238,8 +246,10 @@ pub struct Shown {
     pub quiet: bool,
     // Other finished sessions not checked yet ("+N more").
     pub more: usize,
-    // The peek was clicked: how long ago Claude finished ("25 min ago").
+    // The peek was clicked: how long ago Claude finished or failed ("25 min ago").
     pub recall: Option<String>,
+    // The finish shown (bubble, peek or recall) was an error.
+    pub error: bool,
 }
 
 #[derive(Default)]
@@ -278,6 +288,25 @@ struct Finished {
     bubble: bool,
     // Until quiet is decided, Sprout keeps Working (Machine::reads_presence).
     waits: bool,
+    // The turn failed. Kept here, not read from the session's outcome: a later
+    // turn resets the outcome, and an old error must stay one (code review 18 Nov).
+    error: bool,
+}
+
+impl Finished {
+    // An error follows the Done flow, but never the quiet rule and never ends
+    // by the app being in front: it stays until the x, a click that opens the
+    // app, or the session's next prompt (Mohamed, 18 Nov). The limit error once
+    // stayed on the Mac overnight with no way to close it.
+    fn error(at: f64) -> Self {
+        Finished {
+            at,
+            quiet: Some(false),
+            bubble: true,
+            waits: false,
+            error: true,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Default, PartialEq)]
@@ -367,14 +396,22 @@ impl Machine {
             // the CLI sends Stop before the mod's "aborted".
             match event.kind {
                 Kind::TurnEnd(End::Aborted) if s.outcome != Outcome::Error => {
-                    s.outcome = Outcome::Quiet
+                    s.outcome = Outcome::Quiet;
+                    // That turn was not a finish to announce after all.
+                    if s.finished.as_ref().is_some_and(|f| f.at == s.ended_at) {
+                        s.finished = None;
+                    }
                 }
-                Kind::TurnEnd(End::Error) => s.outcome = Outcome::Error,
-                _ => return,
-            }
-            // That turn was not a finish to announce after all.
-            if s.finished.as_ref().is_some_and(|f| f.at == s.ended_at) {
-                s.finished = None;
+                // It ended in an error after all: that is what shows. Claude Code
+                // reports a failure twice (the hook, then the mod): the second
+                // report keeps the finish the first made (code review 18 Nov).
+                Kind::TurnEnd(End::Error) => {
+                    s.outcome = Outcome::Error;
+                    if !s.finished.as_ref().is_some_and(|f| f.error) {
+                        s.finished = Some(Finished::error(now));
+                    }
+                }
+                _ => {}
             }
             return;
         }
@@ -407,7 +444,11 @@ impl Machine {
                         quiet: None,
                         bubble: true,
                         waits,
+                        error: false,
                     });
+                }
+                if s.outcome == Outcome::Error {
+                    s.finished = Some(Finished::error(now));
                 }
                 s.asks.clear();
             }
@@ -463,7 +504,7 @@ impl Machine {
     }
 
     // The next time the state changes by itself: Done showing after SETTLE, and
-    // the quiet Done hiding again.
+    // the quiet Done hiding again. An error never changes by itself.
     pub fn next_change(&self, now: f64) -> Option<f64> {
         self.sessions
             .values()
@@ -479,12 +520,15 @@ impl Machine {
     }
 
     // True while Blip needs to know what the user is doing: a finish waits for
-    // its quiet decision, or is not checked yet.
+    // its quiet decision, or is not checked yet. Not for an error, which
+    // stays until the user acts, whatever app is in front.
     pub fn needs_presence(&self) -> bool {
-        self.sessions.values().any(|s| s.finished.is_some())
+        self.sessions
+            .values()
+            .any(|s| s.finished.as_ref().is_some_and(|f| !f.error))
     }
 
-    // What the user is doing now (Mac: front app, idle time, lock).
+    // What the user is doing now (Mac and Windows: front app, idle time, lock, display).
     pub fn set_presence(&mut self, presence: Option<Presence>, now: f64) {
         if presence != self.presence {
             self.presence = presence;
@@ -498,9 +542,10 @@ impl Machine {
     fn tick(&mut self, now: f64) {
         let presence = self.presence;
         let read_at = self.read_at;
-        let checked = presence
-            .filter(|p| p.active && now - self.presence_since >= CHECK_AFTER)
-            .and_then(|p| p.front);
+        // The app in front and the user active, and for how long: presence_since
+        // moves whenever the front app, or the user coming or going, changes.
+        let here = presence.filter(|p| p.active).and_then(|p| p.front);
+        let here_for = now - self.presence_since;
         for s in self.sessions.values_mut() {
             let app = s.app.as_ref().map(|a| a.pid);
             let Some(f) = &mut s.finished else { continue };
@@ -516,7 +561,10 @@ impl Machine {
             }
             let over = match f.quiet {
                 Some(true) => now >= f.at + SETTLE + DONE_FOR,
-                Some(false) => checked.is_some() && checked == app,
+                Some(false) => {
+                    let needed = if f.bubble { READ_AFTER } else { CHECK_AFTER };
+                    !f.error && here.is_some() && here == app && here_for >= needed
+                }
                 None => false,
             };
             if over {
@@ -619,7 +667,8 @@ impl Machine {
         };
         if let Some(s) = self.top(now) {
             shown.app = s.app.as_ref().map(|a| a.name.clone());
-            if matches!(state, State::Done | State::Peek) {
+            if matches!(state, State::Done | State::Error | State::Peek) {
+                shown.error = s.finished.as_ref().is_some_and(|f| f.error);
                 shown.project = s
                     .cwd
                     .as_deref()
@@ -655,7 +704,9 @@ impl Session {
     fn changed_at(&self, state: State) -> f64 {
         match state {
             State::NeedsYou => self.asked_at,
-            State::Done | State::Peek => self.finished.as_ref().map_or(self.ended_at, |f| f.at),
+            State::Done | State::Error | State::Peek => {
+                self.finished.as_ref().map_or(self.ended_at, |f| f.at)
+            }
             _ => self.ended_at,
         }
     }
@@ -674,20 +725,19 @@ impl Session {
         if self.running && !self.self_started {
             return State::Working;
         }
-        if !self.running && self.outcome == Outcome::Error {
-            return State::Error;
-        }
         let Some(f) = &self.finished else {
             return State::Hidden;
         };
+        // An error shows as Error where a finish shows Done (same bubble, x and peek).
+        let done = if f.error { State::Error } else { State::Done };
         let since = now - f.at;
         match f.quiet {
             _ if since < SETTLE => State::Working,
             // Not decided yet: waiting for a reading of what the user is doing.
             None if f.waits => State::Working,
-            Some(true) if since < SETTLE + DONE_FOR => State::Done,
+            Some(true) if since < SETTLE + DONE_FOR => done,
             Some(true) => State::Hidden,
-            _ if f.bubble => State::Done,
+            _ if f.bubble => done,
             _ => State::Peek,
         }
     }
@@ -1071,15 +1121,55 @@ mod tests {
         assert!(!m.needs_presence());
     }
 
+    // Mohamed, 19 Nov: coming back from the lock screen, a Done bubble was gone
+    // after 2 s, too soon to read. It now waits 20 s from when the user is back.
     #[test]
-    fn coming_back_while_the_bubble_shows_clears_it_too() {
+    fn coming_back_while_the_bubble_shows_waits_twenty_seconds() {
         let mut m = Machine::default();
         finished_at_10(&mut m);
         m.set_presence(here(CLAUDE, false), 10.0);
         assert_eq!(state_after(&mut m, 10.25), State::Done);
-        m.set_presence(here(CLAUDE, true), 100.0); // the user is back
-        assert_eq!(state_after(&mut m, 101.0), State::Done);
+        m.set_presence(here(CLAUDE, true), 3600.0); // an hour later the user is back
+        assert_eq!(state_after(&mut m, 3602.0), State::Done, "not 2 s");
+        assert_eq!(state_after(&mut m, 3619.0), State::Done, "not yet 20 s");
+        assert_eq!(state_after(&mut m, 3620.0), State::Hidden);
+        assert!(!m.needs_presence());
+    }
+
+    #[test]
+    fn leaving_the_app_before_twenty_seconds_starts_the_count_again() {
+        let mut m = Machine::default();
+        finished_at_10(&mut m);
+        m.set_presence(here(NOTES, true), 10.0);
+        assert_eq!(state_after(&mut m, 10.25), State::Done);
+        m.set_presence(here(CLAUDE, true), 100.0);
+        m.set_presence(here(NOTES, true), 115.0); // a quick look, then away again
+        m.set_presence(here(CLAUDE, true), 120.0);
+        assert_eq!(state_after(&mut m, 139.0), State::Done);
+        assert_eq!(state_after(&mut m, 140.0), State::Hidden);
+    }
+
+    // The x is the user saying "seen": the peek needs only the short time.
+    #[test]
+    fn after_the_x_the_peek_clears_after_two_seconds_in_the_app() {
+        let mut m = Machine::default();
+        finished_at_10(&mut m);
+        m.set_presence(here(NOTES, true), 10.0);
+        assert_eq!(state_after(&mut m, 10.25), State::Done);
+        m.close_bubble();
+        m.set_presence(here(CLAUDE, true), 100.0);
+        assert_eq!(state_after(&mut m, 101.0), State::Peek);
         assert_eq!(state_after(&mut m, 102.0), State::Hidden);
+    }
+
+    #[test]
+    fn a_click_on_the_bubble_still_clears_it_at_once() {
+        let mut m = Machine::default();
+        finished_at_10(&mut m);
+        m.set_presence(here(NOTES, true), 10.0);
+        assert_eq!(state_after(&mut m, 10.25), State::Done);
+        m.checked_app(CLAUDE); // the click opened the session's app
+        assert_eq!(state_after(&mut m, 11.0), State::Hidden);
     }
 
     #[test]
@@ -1284,7 +1374,129 @@ mod tests {
             json!({ "kind": "turn.complete", "session": "s", "reason": "error", "ts": 102.0 }),
             102.1,
         );
-        assert_eq!(m.state(102.1), State::Error);
+        assert_eq!(m.state(102.1 + SETTLE), State::Error);
+    }
+
+    // A session in the Claude app whose turn failed at 10 (a limit, an API error).
+    fn failed_at_10(m: &mut Machine) {
+        feed(m, "hook", hook("UserPromptSubmit", "s", "p"), 0.0);
+        m.set_app("s", claude());
+        feed(m, "hook", hook("StopFailure", "s", "p"), 10.0);
+    }
+
+    // Mohamed, 18 Nov: a limit error stayed on the Mac overnight with no way to
+    // close it. Errors now follow the Done flow and stay until the user acts.
+    #[test]
+    fn an_error_stays_until_the_x_then_peeks() {
+        let mut m = Machine::default();
+        failed_at_10(&mut m);
+        let shown = m.changed(10.25).unwrap();
+        assert_eq!((shown.state, shown.error), (State::Error, true));
+        assert_eq!(shown.app.as_deref(), Some("Claude"));
+        assert_eq!(state_after(&mut m, 36_000.0), State::Error); // ten hours: no timer
+        m.close_bubble();
+        let shown = m.changed(36_001.0).unwrap();
+        assert_eq!((shown.state, shown.error), (State::Peek, true));
+        m.open_recall();
+        let shown = m.changed(36_002.0).unwrap();
+        assert!(shown.error && shown.recall.is_some());
+    }
+
+    #[test]
+    fn an_error_never_goes_quiet_or_counts_as_checked() {
+        let mut m = Machine::default();
+        failed_at_10(&mut m);
+        // The session's app in front, the user active: Done would hide in 5 s.
+        m.set_presence(here(CLAUDE, true), 10.0);
+        assert!(!m.needs_presence());
+        assert_eq!(state_after(&mut m, 10.25), State::Error);
+        assert_eq!(state_after(&mut m, 600.0), State::Error);
+        assert_eq!(m.next_change(600.0), None);
+    }
+
+    #[test]
+    fn opening_the_app_or_a_new_prompt_clears_an_error() {
+        let mut m = Machine::default();
+        failed_at_10(&mut m);
+        assert_eq!(m.click_target(11.0), Some(CLAUDE));
+        m.checked_app(CLAUDE); // the click opened the session's app
+        assert_eq!(state_after(&mut m, 11.0), State::Hidden);
+
+        let mut m = Machine::default();
+        failed_at_10(&mut m);
+        feed(&mut m, "hook", hook("UserPromptSubmit", "s", "p2"), 20.0);
+        assert_eq!(state_after(&mut m, 20.0), State::Working);
+    }
+
+    // Code review 18 Nov: Claude Code reports a failure twice (the StopFailure
+    // hook, then the mod's "error" a moment later). The second must not start
+    // the error again: it flashed Working and reopened a closed bubble.
+    #[test]
+    fn the_same_error_reported_twice_changes_nothing() {
+        let mut m = Machine::default();
+        failed_at_10(&mut m);
+        assert_eq!(state_after(&mut m, 10.5), State::Error);
+        m.close_bubble();
+        assert_eq!(state_after(&mut m, 10.6), State::Peek);
+        let mod_error =
+            json!({ "kind": "turn.complete", "session": "s", "reason": "error", "ts": 10.0 });
+        feed(&mut m, "mod", mod_error, 11.0);
+        assert_eq!(
+            state_after(&mut m, 11.0),
+            State::Peek,
+            "the closed bubble stays closed"
+        );
+        assert_eq!(
+            state_after(&mut m, 11.1),
+            State::Peek,
+            "no flash of Working"
+        );
+        // And while the bubble is still open: no restart of its timing either.
+        let mut m = Machine::default();
+        failed_at_10(&mut m);
+        feed(
+            &mut m,
+            "mod",
+            json!({ "kind": "turn.complete", "session": "s", "reason": "error", "ts": 10.0 }),
+            11.0,
+        );
+        assert_eq!(state_after(&mut m, 11.0), State::Error);
+    }
+
+    // Code review 18 Nov: a turn Claude starts by itself (a background task
+    // ending) reset the session's outcome, so an old error showed as "All done".
+    #[test]
+    fn an_old_error_stays_an_error_when_claude_starts_a_turn_itself() {
+        let mut m = Machine::default();
+        failed_at_10(&mut m);
+        let own = json!({ "hook_event_name": "UserPromptSubmit", "session_id": "s", "prompt_id": "p2",
+                          "prompt": "<task-notification>done</task-notification>" });
+        feed(&mut m, "hook", own, 20.0);
+        feed(&mut m, "hook", hook("Stop", "s", "p2"), 25.0);
+        let shown = m.changed(26.0).or_else(|| Some(m.shown(26.0))).unwrap();
+        assert_eq!((shown.state, shown.error), (State::Error, true));
+        // The app in front does not clear it either.
+        m.set_presence(here(CLAUDE, true), 30.0);
+        assert_eq!(state_after(&mut m, 40.0), State::Error);
+        assert!(!m.needs_presence());
+    }
+
+    #[test]
+    fn work_in_another_session_shows_over_an_old_error() {
+        let mut m = Machine::default();
+        failed_at_10(&mut m);
+        assert_eq!(state_after(&mut m, 11.0), State::Error);
+        feed(&mut m, "hook", hook("UserPromptSubmit", "b", "pb"), 12.0);
+        assert_eq!(state_after(&mut m, 12.0), State::Working);
+        // Over an older Done too, and back to the error when that work ends.
+        feed(&mut m, "hook", hook("Stop", "b", "pb"), 13.0);
+        assert_eq!(state_after(&mut m, 14.0), State::Error);
+        // A question still beats everything.
+        feed(&mut m, "hook", hook("UserPromptSubmit", "b", "pb2"), 15.0);
+        let ask = json!({ "hook_event_name": "PermissionRequest", "session_id": "b",
+                          "prompt_id": "pb2", "tool_name": "Bash", "tool_input": { "command": "x" } });
+        feed(&mut m, "hook", ask, 16.0);
+        assert_eq!(state_after(&mut m, 16.0), State::NeedsYou);
     }
 
     #[test]
