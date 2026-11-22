@@ -30,10 +30,30 @@ test("on Windows Control-click stays a main press", () => {
 });
 
 // The website loads docs/sprout.js, a copy of this one: a missed copy would
-// leave it on old code (code review 10 Nov).
-test("the website's copy matches", () => {
+// leave it on old code (code review 10 Nov). The copy has one change on purpose
+// (22 Nov, docs/DECISIONS.md): a note at the top and the bubble placement measured
+// as drawn, for the shrunk phone playground. The test builds the expected copy from
+// this file plus exactly those changes, so any other difference still fails.
+const WEBSITE_CHANGES = [
+  ["// Copyright (c) 2026 Mohamed. All rights reserved. See LICENSE.\n",
+   "// Copyright (c) 2026 Mohamed. All rights reserved. See LICENSE.\n// WEBSITE COPY. This file is character/sprout.js plus one change, on purpose (decided 22 Nov 2026, see docs/DECISIONS.md):\n// the bubble placement (search \"Measured as drawn\") uses Sprout's size as drawn on screen, so the bubble sits beside\n// Sprout when the page shrinks it (the phone playground). The app never shrinks Sprout and keeps the original lines.\n// When copying a newer character/sprout.js here, carry that block over (4 lines use k and hw), or the phone bubble lands on Sprout again.\n"],
+  ["      // or with opts.bubbleBeside beside the body at eye level (48, 6), for a window with little room above.\n      const r = canvas.getBoundingClientRect(), u = drawPx() / UNITS_PER_SIZE;\n",
+   "      // or with opts.bubbleBeside beside the body at eye level (48, 6), for a window with little room above.\n      // Measured as drawn: on a page that shrinks Sprout's container (a CSS transform), k is that shrink, so the\n      // offsets and Sprout's half-width match what is on screen. Without a transform k is 1 and nothing changes.\n      const r = canvas.getBoundingClientRect(), k = cw ? r.width / cw : 1, u = drawPx() / UNITS_PER_SIZE * k, hw = r.width / 2;\n"],
+  ["      let left = r.left + cw / 2 + bx * u;\n      const room = root.innerWidth - EDGE - left, roomLeft = r.left + cw / 2 - bx * u - EDGE;\n",
+   "      let left = r.left + hw + bx * u;\n      const room = root.innerWidth - EDGE - left, roomLeft = r.left + hw - bx * u - EDGE;\n"],
+  ["      if (flip) left = Math.max(EDGE, r.left + cw / 2 - bx * u - bubble.offsetWidth);\n",
+   "      if (flip) left = Math.max(EDGE, r.left + hw - bx * u - bubble.offsetWidth);\n"],
+  ["      const anchor = r.top + root.scrollY + ch * .6 + by * u, h = bubble.offsetHeight;\n",
+   "      const anchor = r.top + root.scrollY + r.height * .6 + by * u, h = bubble.offsetHeight;\n"]
+];
+test("the website's copy is this file plus its bubble change", () => {
+  let want = code;
+  for (const [from, to] of WEBSITE_CHANGES) {
+    assert.ok(want.includes(from), "the website's bubble change no longer fits sprout.js; update it here and in docs/sprout.js: " + from.trim());
+    want = want.replace(from, to);
+  }
   const copy = readFileSync(new URL("../docs/sprout.js", import.meta.url), "utf8");
-  assert.equal(copy, code, "copy character/sprout.js to docs/sprout.js");
+  assert.equal(copy, want, "copy character/sprout.js to docs/sprout.js and carry over the bubble block");
 });
 
 // Power while peeking (13 Nov): the peek holds still and sways once every 30 s
