@@ -28,12 +28,17 @@ hooks/experiments/
 character/done-flow.html
 docs/*
 !docs/index.html
+!docs/site.css
+!docs/site.js
 !docs/sprout.js
+!docs/og.png
+!docs/favicon.svg
+!docs/favicon.png
+!docs/fonts/
+!docs/photos/
 !docs/video/
 docs/video/*
-!docs/video/blip-demo.mp4
-!docs/video/blip-thumb.jpg
-!docs/video/blip-loop.gif
+!docs/video/loop/
 !docs/.nojekyll
 
 # Demo Day deck and talk notes: personal, kept local (branch demo-day-notes)

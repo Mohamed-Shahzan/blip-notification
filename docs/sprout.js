@@ -1,4 +1,8 @@
 // Copyright (c) 2026 Mohamed. All rights reserved. See LICENSE.
+// WEBSITE COPY. This file is character/sprout.js plus one change, on purpose (decided 22 Nov 2026, see docs/DECISIONS.md):
+// the bubble placement (search "Measured as drawn") uses Sprout's size as drawn on screen, so the bubble sits beside
+// Sprout when the page shrinks it (the phone playground). The app never shrinks Sprout and keeps the original lines.
+// When copying a newer character/sprout.js here, carry that block over (4 lines use k and hw), or the phone bubble lands on Sprout again.
 // Sprout, the Blip character, drawn with Canvas 2D. No dependencies.
 // Same drawing and motion as the Sprout card in playground.html, packaged for the Blip app.
 //
@@ -685,25 +689,27 @@
       }
       // Bottom-left corner of the bubble just above and right of the head (24, -50 in drawing units),
       // or with opts.bubbleBeside beside the body at eye level (48, 6), for a window with little room above.
-      const r = canvas.getBoundingClientRect(), u = drawPx() / UNITS_PER_SIZE;
+      // Measured as drawn: on a page that shrinks Sprout's container (a CSS transform), k is that shrink, so the
+      // offsets and Sprout's half-width match what is on screen. Without a transform k is 1 and nothing changes.
+      const r = canvas.getBoundingClientRect(), k = cw ? r.width / cw : 1, u = drawPx() / UNITS_PER_SIZE * k, hw = r.width / 2;
       const [bx, by] = opts.bubbleBeside ? [48, 6] : [24, -50];
       // EDGE: the gap the bubble keeps from the window's sides and the page's top.
       const EDGE = 8;
       // Right of the head when it fits in the window, otherwise mirrored to the left of it. When it fits on
       // neither side it stays on the right and wraps, so it never covers Sprout.
       bubble.style.whiteSpace = 'nowrap'; bubble.style.maxWidth = '';
-      let left = r.left + cw / 2 + bx * u;
-      const room = root.innerWidth - EDGE - left, roomLeft = r.left + cw / 2 - bx * u - EDGE;
+      let left = r.left + hw + bx * u;
+      const room = root.innerWidth - EDGE - left, roomLeft = r.left + hw - bx * u - EDGE;
       if (bubble.offsetWidth > room && bubble.offsetWidth > roomLeft) {
         bubble.style.whiteSpace = 'normal'; bubble.style.maxWidth = Math.max(120, room) + 'px';
       }
       const flip = left + bubble.offsetWidth > root.innerWidth - EDGE;
-      if (flip) left = Math.max(EDGE, r.left + cw / 2 - bx * u - bubble.offsetWidth);
+      if (flip) left = Math.max(EDGE, r.left + hw - bx * u - bubble.offsetWidth);
       bubble.style.left = (left + root.scrollX) + 'px';
       // Never above the page's top: a tall bubble (Done with three grey lines) grows down instead of
       // into the menu bar (Mohamed's test, 10 Nov). Its pointed corner then goes to the top when that is
       // nearer Sprout's eye than the bottom, that is, the eye is in its upper half (code review, 10 Nov).
-      const anchor = r.top + root.scrollY + ch * .6 + by * u, h = bubble.offsetHeight;
+      const anchor = r.top + root.scrollY + r.height * .6 + by * u, h = bubble.offsetHeight;
       const top = Math.max(EDGE, anchor - h), up = anchor < top + h / 2;
       bubble.style.top = top + 'px';
       bubble.style.borderRadius = up ? (flip ? '12px 3px 12px 12px' : '3px 12px 12px 12px')

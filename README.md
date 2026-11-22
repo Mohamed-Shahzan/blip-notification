@@ -2,7 +2,7 @@
 
 [![Try Sprout live](https://img.shields.io/badge/Try_Sprout_live-playground-4f8cff?style=for-the-badge)](https://mohamed-shahzan.github.io/blip-notification/)
 
-[![Sprout at the top of the screen: working, then needs you, then done](docs/video/blip-loop.gif)](https://mohamed-shahzan.github.io/blip-notification/#video)
+[![Sprout at the top of a Mac screen: Claude asks to edit a file, Sprout puts its hand up, the user clicks it and presses Allow, then Sprout says Claude is done](docs/video/loop/readme.gif)](https://mohamed-shahzan.github.io/blip-notification/#loop)
 
 A small animated character, Sprout, at the top centre of your screen. It tells you when Claude Code is done, needs you, or hit an error, so you can look away while Claude works.
 

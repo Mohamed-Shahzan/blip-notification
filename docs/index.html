@@ -4,518 +4,176 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Blip</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 28'%3E%3Cpath d='M12 4v5' stroke='%23a8a196' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='3.5' r='2.5' fill='%234f8cff'/%3E%3Crect x='2' y='9' width='20' height='17' rx='7' fill='%23f2eee7'/%3E%3Ccircle cx='8.5' cy='17' r='1.7' fill='%2315130f'/%3E%3Ccircle cx='15.5' cy='17' r='1.7' fill='%2315130f'/%3E%3C/svg%3E">
-<meta name="description" content="Sprout sits at the top of your screen and tells you when Claude Code needs you.">
+<title>Blip: a small character that tells you when Claude Code needs you</title>
+<meta name="description" content="A small character at the top of your screen. It tells you when Claude Code needs you, or is done. Free, for Mac and Windows.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://mohamed-shahzan.github.io/blip-notification/">
 <meta property="og:title" content="Blip">
-<meta property="og:description" content="Sprout sits at the top of your screen and tells you when Claude Code needs you.">
-<!-- Preview only. The live site will self-host these three fonts. -->
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&family=JetBrains+Mono:wght@400&family=Onest:wght@400;600&display=swap" rel="stylesheet">
-<style>
-/* The Blip site (steps 4 and 5). Tokens and components copied from system.html, nothing new. */
-
-:root {
-  color-scheme: dark;
-
-  /* Colour */
-  --bg: #15130f;
-  --sunken: #0f0d0a;    /* hero screen, darker than the page */
-  --surface: #1e1c18;
-  --raised: #2a2722;
-  --line: #3a362f;
-  --ink: #f2eee7;
-  --muted: #a8a196;
-  --working: #4f8cff;
-  --needs: #ffb13b;
-  --done: #33c46a;
-  --error: #ff5a5f;
-
-  /* Type */
-  --font-display: "Bricolage Grotesque", system-ui, sans-serif;
-  --font-body: "Onest", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
-  --size-xs: 13px;
-  --size-sm: 15px;
-  --size-md: 17px;
-  --size-lg: 21px;
-  --size-xl: 28px;
-  --size-hero: clamp(44px, 7vw, 56px);
-  --leading-tight: 1.1;
-  --leading-body: 1.55;
-  --weight-body: 400;
-  --weight-strong: 600;
-  --weight-display: 700;
-
-  /* Space: 4 based */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
-  --space-7: 48px;
-  --space-8: 64px;
-  --space-9: 96px;
-
-  /* Shape and layout */
-  --radius-sm: 8px;
-  --radius-lg: 16px;
-  --page: 1040px;
-  --measure: 60ch;
-
-  /* Motion */
-  --ease: cubic-bezier(.2, .8, .2, 1);
-  --fast: 160ms;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  :root { --fast: 0ms; }
-}
-
-  /* Base */
-  * { box-sizing: border-box; }
-  /* Sprout's faded bubble stays on the page at its last spot (sprout.js); after a resize it must not cause sideways scroll. */
-  html { overflow-x: clip; }
-  body { position: relative; overflow-x: clip; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: var(--weight-body) var(--size-md)/var(--leading-body) var(--font-body); }
-  .page { max-width: var(--page); margin: 0 auto; padding: 0 var(--space-4); }
-  p { margin: 0 0 var(--space-4); max-width: var(--measure); text-wrap: pretty; }
-  code { font-family: var(--font-mono); font-size: .9em; }
-  :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
-
-  /* Text styles */
-  .t-hero { font: var(--weight-display) var(--size-hero)/var(--leading-tight) var(--font-display); letter-spacing: -.02em; margin: 0 0 var(--space-4); text-wrap: balance; }
-  .t-lead { font-size: var(--size-lg); color: var(--muted); }
-  .t-small { font-size: var(--size-sm); color: var(--muted); }
-  .t-label { font: var(--size-xs) var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin: 0 0 var(--space-3); }
-
-  /* Button */
-  .btn { display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-5); border-radius: var(--radius-sm); border: 1px solid var(--line); background: none; color: var(--ink); font: var(--weight-strong) var(--size-sm) var(--font-body); text-decoration: none; cursor: pointer; transition: background var(--fast) var(--ease); }
-  .btn:hover { background: var(--raised); }
-  .btn.main { background: var(--ink); color: var(--bg); border-color: var(--ink); }
-  .btn.main:hover { background: var(--muted); }
-
-  /* Hero */
-  .top { padding: var(--space-5) 0; }
-  .wordmark { display: inline-flex; align-items: center; gap: var(--space-2); font: var(--weight-display) var(--size-lg)/1 var(--font-display); color: var(--ink); text-decoration: none; }
-  .mark { width: 22px; height: 26px; }
-  .hero { padding: var(--space-8) 0; text-align: center; }
-  .hero p { margin-left: auto; margin-right: auto; }
-  .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-3); margin: var(--space-5) 0 var(--space-4); }
-  /* One quiet line of facts under the buttons; each is backed in the questions below */
-  .meta { font: var(--size-xs)/var(--leading-body) var(--font-mono); color: var(--muted); margin: 0 auto var(--space-7); text-wrap: balance; }
-  .meta span { white-space: nowrap; } /* break between facts, never inside one */
-
-  /* Screen frame: the hero demo */
-  .screen { background: var(--sunken); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; text-align: left; }
-  .menubar { height: 28px; background: var(--raised); display: flex; justify-content: flex-end; align-items: center; padding: 0 var(--space-2); }
-  /* Wi-Fi switch: on is ink, off is line. The knob slides */
-  .wifi { display: inline-flex; align-items: center; gap: var(--space-2); background: none; border: 0; border-radius: var(--radius-sm); padding: var(--space-1) var(--space-2); color: var(--ink); font: var(--size-xs) var(--font-mono); cursor: pointer; }
-  .knob { position: relative; width: 24px; height: 14px; border-radius: 7px; background: var(--ink); transition: background var(--fast) var(--ease); }
-  .knob::after { content: ""; position: absolute; top: 2px; left: 12px; width: 10px; height: 10px; border-radius: 50%; background: var(--bg); transition: left var(--fast) var(--ease); }
-  .wifi[aria-checked="false"] { color: var(--muted); }
-  .wifi[aria-checked="false"] .knob { background: var(--line); }
-  .wifi[aria-checked="false"] .knob::after { left: 2px; }
-  .screen-top { position: relative; display: flex; justify-content: center; height: 124px; }
-  /* Shown beside the resting bulb until the visitor has clicked it once, so the bulb doesn't look like a glitch */
-  .bulb-hint { position: absolute; top: var(--space-3); left: calc(50% + var(--space-5)); font: var(--size-xs) var(--font-mono); color: var(--muted); opacity: 0; transition: opacity var(--fast) var(--ease); pointer-events: none; }
-  .bulb-hint.on { opacity: 1; }
-  /* Sprout's canvas sits in a button so the keyboard can poke it. The canvas is 112 x 142 (canvasSize(56)), its top hidden under the menu bar's edge. */
-  .poke { padding: 0; margin-top: -6px; border: 0; background: none; border-radius: var(--radius-sm); cursor: pointer; height: 142px; }
-  .poke canvas { display: block; width: 112px; height: 142px; }
-
-  /* Chat */
-  /* Desktop under the menu bar: the Claude window and Sprout's log side by side, stacked on phones */
-  .desk { display: grid; grid-template-columns: 1fr 240px; gap: var(--space-4); align-items: start; padding: 0 var(--space-5) var(--space-5); }
-  .window { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
-  .titlebar { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); font: var(--size-xs) var(--font-mono); color: var(--muted); }
-  .titlebar i { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
-  .titlebar i:last-of-type { margin-right: var(--space-2); }
-
-  /* Chat */
-  /* Tall enough for the whole Allow path at desktop width (measured 341 px), so the window never grows mid-demo */
-  .chat { min-height: 344px; padding: var(--space-4); font-size: var(--size-sm); }
-  .msg { background: var(--raised); border-radius: var(--radius-sm); padding: var(--space-2) var(--space-3); margin-bottom: var(--space-2); max-width: 85%; animation: in var(--fast) var(--ease) both; }
-  .msg.you { margin-left: auto; background: var(--line); }
-  .ask { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
-  .ask .btn { padding: var(--space-1) var(--space-4); }
-  .ask .btn:disabled { cursor: default; }
-  .ask .btn:disabled:not(.main) { opacity: .5; }
-  .again { display: block; margin: var(--space-3) auto 0; background: none; border: 0; padding: var(--space-1); color: var(--ink); font: inherit; text-decoration: underline; cursor: pointer; }
-  .events { list-style: none; margin: 0; padding: var(--space-3) var(--space-4); font-size: var(--size-sm); }
-  .events li { display: grid; grid-template-columns: 8px 1fr; column-gap: var(--space-3); align-items: baseline; padding: var(--space-2) 0; animation: in var(--fast) var(--ease) both; }
-  .events b { font-weight: var(--weight-strong); }
-  .events small { grid-column: 2; font-size: var(--size-xs); color: var(--muted); }
-  .events .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--line)); }
-  @keyframes in { from { opacity: 0; transform: translateY(4px); } }
-  @media (prefers-reduced-motion: reduce) { .msg, .events li { animation: none; } }
-
-  /* Sections */
-  .block { padding: var(--space-9) 0; }
-  .t-h2 { font: var(--weight-display) var(--size-xl)/var(--leading-tight) var(--font-display); margin: 0 0 var(--space-5); }
-
-  /* Video frame */
-  .video { display: block; width: 100%; aspect-ratio: 16 / 9; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); }
-  /* Thumbnail: the title card with a play button; clicking anywhere on it starts the video with its controls */
-  .player { position: relative; margin-bottom: var(--space-3); }
-  /* A dark veil over the thumbnail and a big round play button, centred in the open space under Sprout and the name */
-  .play { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: var(--space-3); padding: 0 0 12%; background: color-mix(in srgb, var(--bg) 35%, transparent); border: 0; border-radius: var(--radius-lg); color: var(--ink); cursor: pointer; transition: background var(--fast) var(--ease); }
-  .play-circle { display: grid; place-items: center; width: 80px; height: 80px; border-radius: 50%; background: var(--ink); box-shadow: 0 var(--space-2) var(--space-6) color-mix(in srgb, var(--bg) 60%, transparent); transition: transform var(--fast) var(--ease); }
-  .play-icon { width: 0; height: 0; margin-left: var(--space-1); border-style: solid; border-width: 12px 0 12px 20px; border-color: transparent transparent transparent var(--bg); }
-  .play-label { font: var(--weight-strong) var(--size-sm) var(--font-body); }
-  @media (hover: hover) { .play:hover { background: color-mix(in srgb, var(--bg) 15%, transparent); } .play:hover .play-circle { transform: scale(1.08); } }
-  .play:active .play-circle { transform: scale(.96); }
-  /* Phones: the video is short, so a smaller button sits low and the label goes */
-  @media (max-width: 720px) { .play { padding-bottom: 6%; } .play-circle { width: 44px; height: 44px; } .play-icon { border-width: 7px 0 7px 12px; } .play-label { display: none; } }
-  .player.playing .play { display: none; }
-
-  /* State card: a button, so a click or Enter pokes its Sprout */
-  .states { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); margin-bottom: var(--space-5); }
-  .card { display: flex; flex-direction: column; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: var(--space-5); font: var(--size-sm)/var(--leading-body) var(--font-body); color: var(--muted); text-align: left; cursor: pointer; }
-  /* The canvas keeps room above Sprout for its hops; pull it up and left so the body lines up with the text */
-  .card canvas { display: block; width: 80px; height: 102px; margin: calc(-1 * var(--space-5)) 0 0 calc(-1 * var(--space-4)); }
-  .card b { display: block; color: var(--ink); margin: var(--space-4) 0 var(--space-1); }
-
-
-  /* Question */
-  details { border-bottom: 1px solid var(--line); padding: var(--space-4) 0; }
-  summary { font-weight: var(--weight-strong); cursor: pointer; }
-  details p { color: var(--muted); margin: var(--space-2) 0 0; }
-  details code { display: block; margin: var(--space-2) 0; padding: var(--space-2) var(--space-3); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--ink); overflow-wrap: anywhere; }
-  details a { color: var(--ink); }
-
-  /* Footer */
-  .footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-2); padding: var(--space-6) 0 var(--space-7); border-top: 1px solid var(--line); font-size: var(--size-sm); color: var(--muted); }
-  .footer a { color: var(--ink); }
-
-  /* Micro-interactions: things you can click lift a little on hover and press in when clicked */
-  .btn, .wifi, .again, .card, .footer a, .wordmark, summary { transition: transform var(--fast) var(--ease), background var(--fast) var(--ease), border-color var(--fast) var(--ease); }
-  .footer a, .wordmark { display: inline-flex; }
-  @media (hover: hover) {
-    .btn:not(:disabled):hover, .wifi:hover, .again:hover, .footer a:hover, .wordmark:hover { transform: translateY(-1px); }
-    .card:hover { transform: translateY(-2px); border-color: var(--muted); }
-    summary:hover { transform: translateX(var(--space-1)); }
-  }
-  .btn:not(:disabled):active, .wifi:active, .again:active, .card:active, .footer a:active, .wordmark:active, summary:active { transform: scale(.97); }
-
-  /* Accordion: the answer fades and slides in when it opens, and out before it closes (see script) */
-  details[open] > :not(summary) { animation: reveal var(--fast) var(--ease); }
-  details.closing > :not(summary) { animation: conceal var(--fast) var(--ease) forwards; }
-  @keyframes reveal { from { opacity: 0; transform: translateY(calc(-1 * var(--space-1))); } }
-  @keyframes conceal { to { opacity: 0; transform: translateY(calc(-1 * var(--space-1))); } }
-  @media (prefers-reduced-motion: reduce) {
-    .btn, .wifi, .again, .card, .footer a, .wordmark, summary { transform: none !important; }
-    details > :not(summary) { animation: none !important; }
-  }
-
-  @media (max-width: 720px) {
-    .hero { padding: var(--space-8) 0; }
-    .block { padding: var(--space-8) 0; }
-    .states { grid-template-columns: 1fr 1fr; }
-    .desk { grid-template-columns: 1fr; padding: 0 var(--space-3) var(--space-3); }
-  }
-</style>
+<meta property="og:description" content="A small character at the top of your screen. It tells you when Claude Code needs you, or is done.">
+<meta property="og:image" content="https://mohamed-shahzan.github.io/blip-notification/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The Blip website: a small character called Sprout at the top of a Mac screen, asking for attention above a Claude Code window.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preload" href="fonts/onest-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="site.css">
 </head>
 <body>
-<main class="page">
-  <header class="top"><a class="wordmark" href="#"><svg class="mark" viewBox="0 0 24 28" aria-hidden="true"><path d="M12 4v5" stroke="var(--muted)" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="3.5" r="2.5" fill="var(--working)"/><rect x="2" y="9" width="20" height="17" rx="7" fill="var(--ink)"/><circle cx="8.5" cy="17" r="1.7" fill="var(--bg)"/><circle cx="15.5" cy="17" r="1.7" fill="var(--bg)"/></svg>Blip</a></header>
-  <section class="hero">
-    <h1 class="t-hero">Sprout watches Claude Code so you don't have to.</h1>
-    <p class="t-lead">A little lookout at the top of your screen. When Claude needs you, it puts its hand up.</p>
-    <div class="actions">
-      <a class="btn main" href="https://github.com/Mohamed-Shahzan/blip-notification">GitHub</a>
-      <a class="btn" href="#video">Watch the video</a>
-    </div>
-    <p class="meta"><span>Free</span> · <span>Source on GitHub</span></p>
-    <p class="t-small">This is your playground. Press Allow or Deny, or turn the Wi-Fi off.</p>
 
-    <div class="screen" id="demo">
-      <div class="menubar"><button class="wifi" id="wifi" type="button" role="switch" aria-checked="true">Wi-Fi<span class="knob" aria-hidden="true"></span></button></div>
-      <div class="screen-top">
-        <span class="bulb-hint" id="bulb-hint" aria-hidden="true">← click me</span>
-        <button class="poke" id="poke" type="button" aria-label="Poke Sprout" tabindex="-1"><canvas id="sprout" aria-hidden="true"></canvas></button>
-      </div>
-      <div class="desk">
-        <div class="window">
-          <div class="titlebar" aria-hidden="true"><i></i><i></i><i></i>Claude</div>
-          <div class="chat" id="chat"></div>
-        </div>
-        <div class="window">
-          <div class="titlebar"><i aria-hidden="true"></i><i aria-hidden="true"></i><i aria-hidden="true"></i>What Sprout heard</div>
-          <ol class="events" id="events" aria-live="polite"></ol>
-        </div>
+<div class="nav-bar" id="nav-bar">
+  <div class="nav">
+    <a class="logo" href="#" aria-label="Blip, back to top"><canvas id="logo-sprout" aria-hidden="true"></canvas></a>
+    <nav class="links" aria-label="Sections"><a href="#states">What it shows</a><a href="#loop">Watch it</a><a href="#where">Works with</a><a href="#questions">FAQ</a></nav>
+    <a class="btn btn-ink btn-sm" href="#install" data-go>Get Blip</a>
+  </div>
+</div>
+<a class="float-cta" id="float-cta" href="#install" data-go><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v9M4 7l4 4 4-4M3 14h10"/></svg>Install Blip</a>
+<div class="spot" id="spot" aria-hidden="true"></div>
+<svg class="flow" id="flow" aria-hidden="true"></svg>
+<!-- Hero: the line, the install box, and the real thing straight away -->
+<header class="hero">
+
+  <div class="wrap hero-top">
+    <div>
+      <h1 class="h h-1">A small character at the top of your screen.<br><span class="soft">It tells you when Claude needs you, or is done.</span></h1>
+    </div>
+    <div id="install">
+      <div class="install">
+        <p class="say">Paste this into Claude Code</p>
+        <div class="cmd"><code>Install Blip by following https://<wbr>github.com/<wbr>Mohamed-Shahzan/<wbr>blip-notification/<wbr>blob/<wbr>main/<wbr>INSTALL.md</code><button class="btn btn-ink btn-sm" type="button" data-copy>Copy</button></div>
+        <p class="note">Claude explains each step and asks before it runs anything.</p>
       </div>
     </div>
-  </section>
+  </div>
 
-  <section class="block" id="video">
-    <h2 class="t-h2">In under a minute</h2>
-    <div class="player">
-      <video class="video" preload="metadata" playsinline poster="video/blip-thumb.jpg" aria-label="Blip demo, with and without Blip" title="Blip demo. Voice: elevenlabs.io">
-        <source src="video/blip-demo.mp4" type="video/mp4">
-      </video>
-      <button class="play" type="button" aria-label="Play the demo, 53 seconds"><span class="play-circle" aria-hidden="true"><span class="play-icon"></span></span><span class="play-label" aria-hidden="true">Play the demo · 53 s</span></button>
+  <div class="wrap">
+    <div class="fit" id="hero-fit">
+      <div class="scene" id="hero-scene">
+        <div class="mbar"><b>Claude</b><span>File</span><span>Edit</span><span>View</span><span>Window</span>
+          <span class="r"><button class="wifi-btn hint" id="wifi" type="button" role="switch" aria-checked="true" aria-label="Wi-Fi"><svg viewBox="0 0 17 13" fill="currentColor" aria-hidden="true"><path d="M8.5 13 6 10.2a3.5 3.5 0 0 1 5 0z"/><path d="M8.5 5.6c1.9 0 3.6.8 4.8 2l-1.3 1.4a5 5 0 0 0-7 0L3.7 7.6a6.8 6.8 0 0 1 4.8-2z" opacity=".9"/><path d="M8.5 1.2c3.1 0 5.9 1.2 8 3.2L15.2 5.8a9.3 9.3 0 0 0-13.4 0L.5 4.4a11.2 11.2 0 0 1 8-3.2z" opacity=".9"/></svg></button><span>Thu 10:04</span></span></div>
+        <div class="notch"></div>
+        <button class="sprout-slot" id="hero-poke" type="button" aria-label="Sprout"><canvas id="hero-sprout" aria-hidden="true"></canvas></button>
+        <div class="cw" style="left:150px; top:96px; width:980px; height:560px">
+          <div class="tb"><span class="dots"><i></i><i></i><i></i></span><span class="tt">Fix the failing date test</span></div>
+          <div class="cols">
+            <aside class="side"><div class="nv"><span>+</span>New</div><div class="nv"><span>&#8981;</span>Search</div><div class="nv"><span>&#9633;</span>Plugins</div><div class="pj">billing-app</div><div class="rw sel">Fix the failing date test</div><div class="rw">Update the API docs</div><div class="rw">Add invoice export</div><div class="rw">Review the open pull request</div><div class="me">You</div></aside>
+            <div class="main">
+              <div class="meta">Started on this computer · billing-app</div>
+              <div class="chat" id="hero-chat" aria-live="polite"></div>
+              <div class="comp"><span>+</span><span>Type / for commands</span></div>
+              <div class="model">Sonnet 5.5 &nbsp; Medium &nbsp; Manual</div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
-    <p class="t-small">With and without Blip.</p>
-  </section>
-
-  <section class="block">
-    <h2 class="t-h2">The states</h2>
-    <div class="states">
-      <button class="card" type="button" data-state="working"><canvas aria-hidden="true"></canvas><b>Working</b>Blue. A light runs up the antenna about once a second, then it calms down so it isn't annoying.</button>
-      <button class="card" type="button" data-state="needs"><canvas aria-hidden="true"></canvas><b>Needs you</b>Amber. Hops, hand up. Every 8 seconds it reminds you again, quietly.</button>
-      <button class="card" type="button" data-state="done"><canvas aria-hidden="true"></canvas><b>Done</b>Green. One hop, a little star, then it goes away.</button>
-      <button class="card" type="button" data-state="error"><canvas aria-hidden="true"></canvas><b>Error</b>Red. It slumps. The bulb flickers until you go and look.</button>
+    <div class="try">
+      <span class="chip"><b>1</b>Press Allow or Deny</span>
+      <span class="chip"><b>2</b>Click Sprout</span>
+      <span class="chip"><b>3</b>Wi-Fi <button class="sw" id="wifi2" type="button" role="switch" aria-checked="true" aria-label="Wi-Fi"><i></i></button><small>Turn it off while Claude works</small></span>
+      <button class="btn btn-soft btn-sm" id="replay" type="button">Play again</button>
     </div>
-    <p class="t-small">Click a Sprout a few times. Keep going and it gets fed up.</p>
+  </div>
+</header>
+
+<main class="sheet">
+  <!-- The states -->
+  <section class="sec wrap" id="states">
+    <div class="sec-head">
+      <h2 class="h h-2">Know what Claude is doing<br><span class="soft">without switching windows.</span></h2>
+      <p class="hint">Hover or tap a card to see it.</p>
+    </div>
+    <div class="states" id="state-cards">
+      <div class="st open" role="button" tabindex="0" data-state="working" style="--c:var(--working)" aria-expanded="true">
+        <div class="mini"></div><div class="veil"></div>
+        <span class="vlabel"><i></i>Working</span>
+        <div class="cap"><b><i></i>Claude is working</b><span>Sprout reads along quietly. After 20 seconds it shrinks down, so it stays out of your way.</span></div><span class="prog"><b></b></span>
+      </div>
+      <div class="st" role="button" tabindex="0" data-state="needs" style="--c:var(--needs)" aria-expanded="false">
+        <div class="mini"></div><div class="veil"></div>
+        <span class="vlabel"><i></i>Needs you</span>
+        <div class="cap"><b><i></i>Claude needs you</b><span>Sprout jumps and tells you what Claude wants to do. If you don't answer, it reminds you every 8 seconds.</span></div><span class="prog"><b></b></span>
+      </div>
+      <div class="st" role="button" tabindex="0" data-state="done" style="--c:var(--done)" aria-expanded="false">
+        <div class="mini"></div><div class="veil"></div>
+        <span class="vlabel"><i></i>Done</span>
+        <div class="cap"><b><i></i>Claude is done</b><span>Sprout says "All done". Click it to go straight back to Claude.</span></div><span class="prog"><b></b></span>
+      </div>
+      <div class="st" role="button" tabindex="0" data-state="error" style="--c:var(--error)" aria-expanded="false">
+        <div class="mini"></div><div class="veil"></div>
+        <span class="vlabel"><i></i>Error</span>
+        <div class="cap"><b><i></i>Something went wrong</b><span>Sprout slumps and shows you why, for example a lost connection. It stays until you close it.</span></div><span class="prog"><b></b></span>
+      </div>
+    </div>
   </section>
 
-  <section class="block">
-    <h2 class="t-h2">You might be wondering</h2>
-    <details open><summary>Does it slow Claude down?</summary><p>No. I tested it with Blip frozen and with Blip quit. Claude carried on both times.</p></details>
-    <details><summary>Does it send my code anywhere?</summary><p>No. Everything stays on your computer.</p></details>
-    <details><summary>Does it work on Windows?</summary><p>Not yet. Blip is Mac only for now, and Windows is next on my list.</p></details>
-    <details><summary>Does it work with Cursor or Codex?</summary><p>With Claude Code, yes, wherever Claude Code runs. So far I've tested it in the Claude app and Terminal on a Mac. Codex and Cursor's own agent aren't supported yet.</p></details>
-    <details><summary>How do I install it?</summary><p>Ask Claude Code to do it. Paste this into Claude Code: <code>Install Blip by following https://github.com/Mohamed-Shahzan/blip-notification/blob/main/INSTALL.md</code> It explains each step and asks before running it. The first time takes about 15 minutes, mostly waiting for the build. The steps by hand are in the <a href="https://github.com/Mohamed-Shahzan/blip-notification#install-mac">README</a>. A one-click download comes later.</p></details>
+  <!-- The loop -->
+  <section class="band" id="loop">
+    <div class="wrap">
+      <h2 class="h h-2">One task, start to finish.<br><span class="soft">This is what Sprout looks like on a real screen.</span></h2>
+    </div>
+    <div class="loop-wide">
+      <div class="loop">
+        <video id="loop-video" muted loop playsinline preload="metadata" poster="video/loop/poster.jpg" data-phone-poster="video/loop/poster-phone.jpg" aria-label="A Mac desktop. Claude asks to edit a file while the user works in their calendar. Sprout puts its hand up, the user clicks it, presses Allow and goes back to work. Sprout then says Claude is done."><source src="video/loop/web-phone.mp4" type="video/mp4" media="(max-width: 600px)"><source src="video/loop/web.mp4" type="video/mp4"></video>
+        <button class="pp" id="loop-pp" type="button" aria-label="Pause the video"><svg viewBox="0 0 14 14" fill="currentColor" aria-hidden="true"><rect x="2" y="1" width="3.5" height="12" rx="1"/><rect x="8.5" y="1" width="3.5" height="12" rx="1"/></svg></button>
+        <button class="big-play" id="loop-play" type="button" aria-label="Play the video"><span><svg viewBox="0 0 14 14" fill="currentColor" aria-hidden="true"><path d="M3.5 1.5v11l9-5.5z"/></svg></span></button>
+      </div>
+    </div>
   </section>
 
-  <footer class="footer">
-    <span>Made by Mohamed, a design engineer, with Claude Code. Free to use, not to copy.</span>
-    <a href="https://github.com/Mohamed-Shahzan/blip-notification">GitHub</a>
-  </footer>
+  <!-- Where it works -->
+  <section class="sec wrap" id="where">
+    <div class="sec-head">
+      <h2 class="h h-2">Works wherever<br><span class="soft">Claude Code runs.</span></h2>
+    </div>
+    <div class="apps">
+      <div class="app"><div class="thumb"><canvas aria-hidden="true"></canvas><div class="mw dark"><i></i><span></span><span class="s"></span><span class="k"></span></div></div><b>Claude app</b><span>Mac and Windows</span></div>
+      <div class="app"><div class="thumb"><canvas aria-hidden="true"></canvas><div class="mw tm"><i></i><span></span><span class="s"></span><span class="t"></span></div></div><b>Terminal</b><span>Mac and Windows</span></div>
+      <div class="app"><div class="thumb"><canvas aria-hidden="true"></canvas><div class="mw ed"><i></i><span></span><span class="s"></span><span class="p"></span></div></div><b>Code editors</b><span>VS Code, Cursor, Antigravity, with Claude Code inside</span></div>
+      <div class="app soon"><div class="thumb"><div class="mw ed"><i></i><span></span><span class="s"></span><span class="p"></span></div></div><b>Codex, Cursor's own AI and others</b><span>Coming soon</span></div>
+    </div>
+  </section>
+
+  <!-- Questions -->
+  <section class="sec wrap" id="questions">
+    <div class="sec-head">
+      <h2 class="h h-2">Questions</h2>
+    </div>
+    <div class="qs">
+      <details class="q"><summary>Does it slow Claude down?<span class="plus" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg></span></summary><div class="ans"><p>No. Each hook gives up after 2 seconds and Claude never waits for it. I froze Blip on purpose and quit it, on a Mac and on Windows, and Claude carried on.</p></div></details>
+      <details class="q"><summary>Does it send my code anywhere?<span class="plus" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg></span></summary><div class="ans"><p>No. Blip only listens on your own computer. Nothing goes online.</p></div></details>
+      <details class="q"><summary>Does it work on Windows?<span class="plus" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg></span></summary><div class="ans"><p>Yes. The same install line works there. Tested in the Claude app and in Antigravity.</p></div></details>
+      <details class="q"><summary>Where does it work?<span class="plus" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg></span></summary><div class="ans"><p>Anywhere Claude Code runs on your own computer. Not on claude.ai in a browser, because that runs in the cloud. Codex and Cursor's own agent aren't supported.</p></div></details>
+      <details class="q"><summary>How long does installing take?<span class="plus" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg></span></summary><div class="ans"><p>About 15 minutes the first time on a Mac, mostly waiting for the build. Claude does the work and asks before each step.</p></div></details>
+      <details class="q"><summary>What does it cost?<span class="plus" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg></span></summary><div class="ans"><p>Nothing. No account, no sign-up. Free to use, including at work.</p></div></details>
+    </div>
+    <p class="more">Something else? <a href="https://github.com/Mohamed-Shahzan/blip-notification/issues">Ask me on GitHub</a></p>
+  </section>
+
+  <!-- Closing card -->
+  <section class="wrap">
+    <div class="close">
+      <h2 class="h h-2">Give Claude something long.<br><span class="soft">Go make a coffee.</span></h2>
+      <div class="install">
+        <p class="say">Paste this into Claude Code</p>
+        <div class="cmd"><code>Install Blip by following https://<wbr>github.com/<wbr>Mohamed-Shahzan/<wbr>blip-notification/<wbr>blob/<wbr>main/<wbr>INSTALL.md</code><button class="btn btn-ink btn-sm" type="button" data-copy>Copy</button></div>
+        <p class="note">Mac and Windows · Free</p>
+      </div>
+    </div>
+  </section>
+  <div class="wrap"><div class="foot">
+    <span>Blip and Sprout by Mohamed, made with Claude Code.</span>
+    <nav aria-label="Footer"><a href="https://github.com/Mohamed-Shahzan/blip-notification">GitHub</a><a href="https://github.com/Mohamed-Shahzan/blip-notification/blob/main/LICENSE">Licence</a><a href="#">Back to top</a></nav>
+  </div></div>
 </main>
 
-<!-- A copy of character/sprout.js (GitHub Pages only serves docs/). Re-copy when sprout.js changes. -->
+<!-- The end: the photo edge to edge, "Blip" behind the hill, Sprout the dot on the i -->
+<footer class="end" id="end">
+  <canvas class="ph ph-bg" aria-hidden="true"></canvas><canvas class="ph ph-fg" aria-hidden="true"></canvas>
+  <div class="word" aria-label="Blip">Bl<span class="i">&#305;<span class="bl"></span><canvas id="dot-sprout" aria-hidden="true"></canvas></span>p</div>
+</footer>
+
 <script src="sprout.js"></script>
-<script>
-(function () {
-  // Timings for the fake chat, in ms.
-  const READ_MS = 2500, TESTS_MS = 2000, DONE_MS = 2500, DENY_MS = 1200, AWAKE_MS = 4500, LINGER_MS = 4000;
-  const NAMES = { working: 'Working', needs: 'Needs you', done: 'Done', error: 'Error' };
-  const WAKE_LINE = 'Nothing to do right now. Press Try again.';
-  // Resting colours the done state grey (the muted token), so the hanging bulb reads "nothing going on", not Done.
-  const GREY = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim();
-  const GREEN = BlipSprout.DEFAULTS.colors.done;
-
-  const chat = document.getElementById('chat'), events = document.getElementById('events');
-  const pokeBtn = document.getElementById('poke');
-  // The button handles every press (handlePress off), so a click can wake a resting Sprout instead of poking it.
-  // compactTop: the stalk hangs from the menu bar's edge, 6 px below the canvas top (see .poke).
-  const sprout = BlipSprout.create(document.getElementById('sprout'), { size: 56, handlePress: false, compactTop: 6 });
-  let timers = [], started = false, keyboard = false; // keyboard: "Try again" was pressed with a key, so Allow gets focus next
-  let resting = false, awakeTimer = 0, woken = false; // woken: the visitor has clicked the resting bulb at least once
-  const hint = document.getElementById('bulb-hint');
-  // Into the bulb; the hint shows beside it until the first click.
-  function tuck() { sprout.setCompact(true); hint.classList.toggle('on', !woken); }
-  // phase: what Claude is doing. Turning the Wi-Fi off only breaks things while Claude is working;
-  // while it waits for Allow or Deny nothing goes over the network yet.
-  let phase = 'end', errored = false, wifiBroke = false, askButtons = []; // wifiBroke: this run ended because the Wi-Fi went off
-  const wifi = document.getElementById('wifi');
-  const wifiOn = () => wifi.getAttribute('aria-checked') === 'true';
-
-  const later = (ms, fn) => timers.push(setTimeout(fn, ms));
-
-  function msg(html, you) {
-    const el = document.createElement('div');
-    el.className = 'msg' + (you ? ' you' : '');
-    el.innerHTML = html;
-    chat.appendChild(el);
-    return el;
-  }
-
-  // Sprout changes state and says its line; the log gets a row: the state, and what Claude did to cause it.
-  // The log is aria-live, so screen readers hear each row; the bubble stays quiet.
-  function state(s, why) {
-    sprout.setState(s);
-    sprout.say(sprout.line, false, 2200);
-    pokeBtn.tabIndex = 0;
-    logRow(NAMES[s], why, s);
-  }
-
-  function logRow(name, why, colour) {
-    const li = document.createElement('li'), dot = document.createElement('span'), b = document.createElement('b'), note = document.createElement('small');
-    dot.className = 'dot'; dot.style.setProperty('--c', 'var(--' + colour + ')');
-    b.textContent = name; note.textContent = why;
-    li.append(dot, b, note);
-    events.append(li);
-  }
-
-  // Where the app hides Sprout, the site keeps the antenna hanging (Sprout's compact form) so there is still
-  // something to click. Resting uses the done face, coloured grey; after a Deny it comes in quietly (no egg),
-  // since the visitor said no and there was no Done.
-  // linger: a line Sprout says first, staying out for a few seconds before it goes into the bulb (after a Deny).
-  function rest(why, linger) {
-    resting = true;
-    sprout.update({ colors: { done: GREY } });
-    if (sprout.state !== 'done') { sprout.update({ eggs: false }); sprout.setState('done'); sprout.update({ eggs: true }); }
-    clearTimeout(awakeTimer);
-    if (linger) { sprout.say(linger, true, LINGER_MS - 300); awakeTimer = setTimeout(tuck, LINGER_MS); }
-    else tuck();
-    pokeBtn.setAttribute('aria-label', 'Wake Sprout');
-    logRow('Resting', why, 'muted');
-  }
-
-  // Wi-Fi off while Claude works: Claude stops with an error and Sprout stays red until someone looks.
-  function fail() {
-    timers.forEach(clearTimeout); timers = [];
-    phase = 'end'; errored = true; wifiBroke = true;
-    askButtons.forEach(b => { b.disabled = true; });
-    msg('Connection lost. Couldn\'t reach the server.');
-    state('error', 'Claude stopped with an error');
-    pokeBtn.setAttribute('aria-label', 'Look at Sprout');
-    again();
-  }
-
-  // A press: wakes a resting Sprout (it comes out and says there is nothing to do), otherwise a normal poke.
-  // Awake, it goes back into its bulb after a few quiet seconds; every press restarts that wait.
-  function press() {
-    // Clicking a red Sprout is "going to look": it calms down and rests.
-    if (errored) { errored = false; rest('You went and looked'); return; }
-    if (resting) {
-      clearTimeout(awakeTimer);
-      awakeTimer = setTimeout(tuck, AWAKE_MS);
-      if (sprout.compact) { woken = true; hint.classList.remove('on'); sprout.setCompact(false); sprout.say(WAKE_LINE, true, AWAKE_MS - 500); return; }
-    }
-    sprout.poke();
-  }
-
-  function play() {
-    timers.forEach(clearTimeout); timers = [];
-    chat.textContent = ''; events.textContent = '';
-    clearTimeout(awakeTimer); resting = false; errored = false; wifiBroke = false;
-    wifi.setAttribute('aria-checked', 'true');
-    sprout.update({ colors: { done: GREEN } });
-    sprout.setCompact(false); hint.classList.remove('on');
-    pokeBtn.setAttribute('aria-label', 'Poke Sprout');
-    msg('Rename the old date helpers and run the tests.', true);
-    msg('Reading 14 files…');
-    state('working', 'You sent a prompt');
-    phase = 'working';
-    later(READ_MS, ask);
-  }
-
-  function ask() {
-    const el = msg('Can I run <code>npm test</code>?<div class="ask"><button class="btn main" type="button">Allow</button><button class="btn" type="button">Deny</button></div>');
-    const [allow, deny] = el.querySelectorAll('button');
-    askButtons = [allow, deny];
-    phase = 'needs';
-    state('needs', 'Claude asked to run a command');
-    allow.onclick = () => answer(true, allow, deny);
-    deny.onclick = () => answer(false, allow, deny);
-    // Move focus only when the visitor is already using the demo, never by surprise on load.
-    if (keyboard) allow.focus({ preventScroll: true });
-  }
-
-  function answer(ok, allow, deny) {
-    allow.disabled = deny.disabled = true;
-    (ok ? allow : deny).classList.add('main');
-    (ok ? deny : allow).classList.remove('main');
-    if (ok && !wifiOn()) { fail(); return; }
-    phase = ok ? 'working' : 'end';
-    if (ok) {
-      msg('Running tests…');
-      state('working', 'You allowed it');
-      later(TESTS_MS, () => {
-        msg('All 32 tests pass.');
-        phase = 'end';
-        state('done', 'Claude finished');
-        later(DONE_MS, () => { rest('In the app Sprout hides. Here it waits for a click.'); again(); });
-      });
-    } else {
-      // Like the real app: no hook fires after a Deny, so Sprout stays on Needs you until Claude's reply ends the turn.
-      later(DENY_MS, () => {
-        msg('Okay, I won\'t run them.');
-        rest('You said no, so no Done. Here it waits for a click.', 'Okay, skipping the tests.');
-        again();
-      });
-    }
-  }
-
-  function again() {
-    const btn = document.createElement('button');
-    btn.className = 'again'; btn.type = 'button'; btn.textContent = 'Try again';
-    btn.onclick = e => { keyboard = e.detail === 0; play(); };
-    chat.appendChild(btn);
-    // Allow and Deny are now disabled, so focus would fall back to the page top; keep it in the demo.
-    btn.focus({ preventScroll: true });
-  }
-
-  // Mouse, touch, Enter and Space all arrive as a click on the button.
-  pokeBtn.addEventListener('click', press);
-
-  // The Wi-Fi switch: off while Claude works makes it fail; back on after that starts over.
-  wifi.addEventListener('click', () => {
-    const on = !wifiOn();
-    wifi.setAttribute('aria-checked', String(on));
-    if (!on && phase === 'working') fail();
-    else if (on && wifiBroke) play();
-  });
-
-  // Start when the screen is in view, so the story doesn't play unseen.
-  new IntersectionObserver((entries, io) => {
-    if (!started && entries[0].isIntersecting) { started = true; io.disconnect(); play(); }
-  }, { threshold: .4 }).observe(document.getElementById('demo'));
-})();
-
-// State cards: each has its own Sprout at half bounce, so it stays calm inside a card.
-// It shows its state once the cards are in view. A click or Enter pokes it (the card is the button,
-// so Sprout's own press handling is off). Hovering with a mouse makes it say its line.
-// Done does what the card says: shows, goes away, comes back after a pause.
-(function () {
-  const DONE_SHOW_MS = 2500, DONE_GONE_MS = 2000;
-  const cards = [...document.querySelectorAll('.card')].map(card => {
-    const sprout = BlipSprout.create(card.querySelector('canvas'), { size: 40, handlePress: false, settings: { bounce: .5 } });
-    card.addEventListener('click', () => sprout.poke());
-    card.addEventListener('pointerenter', e => { if (e.pointerType === 'mouse') sprout.say(sprout.line, false, 2200); });
-    return { card, sprout };
-  });
-  function doneLoop(sprout) {
-    sprout.setState('done');
-    doneTimers.push(setTimeout(() => sprout.setState('hidden'), DONE_SHOW_MS));
-    doneTimers.push(setTimeout(() => doneLoop(sprout), DONE_SHOW_MS + DONE_GONE_MS));
-  }
-  // In view: each Sprout shows its state. Out of view: all hide, which stops their drawing loops (saves battery).
-  let doneTimers = [];
-  new IntersectionObserver(entries => {
-    doneTimers.forEach(clearTimeout); doneTimers = [];
-    const seen = entries[entries.length - 1].isIntersecting;
-    cards.forEach(({ card, sprout }) => {
-      if (!seen) sprout.setState('hidden');
-      else if (card.dataset.state === 'done') doneLoop(sprout);
-      else sprout.setState(card.dataset.state);
-    });
-  }, { threshold: .1 }).observe(document.querySelector('.states'));
-})();
-
-// Questions: a row closes after its answer has faded out (opening is plain CSS). Instant with Reduce Motion.
-(function () {
-  const reduce = matchMedia('(prefers-reduced-motion: reduce)');
-  const fast = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--fast')) || 0;
-  document.querySelectorAll('details').forEach(d => d.querySelector('summary').addEventListener('click', e => {
-    if (!d.open || reduce.matches || !fast) return;
-    e.preventDefault();
-    d.classList.add('closing');
-    setTimeout(() => { d.open = false; d.classList.remove('closing'); }, fast);
-  }));
-})();
-
-// Demo video: the thumbnail's button starts it with controls; when it ends the thumbnail comes back.
-(function () {
-  const player = document.querySelector('.player'), video = player.querySelector('video'), btn = player.querySelector('.play');
-  btn.addEventListener('click', () => {
-    player.classList.add('playing');
-    video.controls = true;
-    video.play();
-    video.focus();
-  });
-  video.addEventListener('ended', () => {
-    player.classList.remove('playing');
-    video.controls = false;
-    video.load(); // shows the poster again
-  });
-})();
-</script>
+<script src="site.js"></script>
 </body>
 </html>
