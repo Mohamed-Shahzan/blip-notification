@@ -3,6 +3,7 @@
 'use strict';
 const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = s => document.querySelector(s);
+const MAC = /mac|iphone|ipad/i.test((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '');
 const wait = ms => new Promise(r => setTimeout(r, ms));
 // Same Sprout options as the app (app/src/main.js): bubble beside the body, the peek at 32.
 const APP = { bubbleBeside: true, handlePress: false, peekSize: 32, settings: { lookRange: 1.75 } };
@@ -35,8 +36,8 @@ function inView(el, on, off, t = .35) { new IntersectionObserver(e => e[0].isInt
 // ---------- "Get Blip" and the floating pill: dim the page, lift the install card, and draw an arrow from the button to it ----------
 (function () {
   const target = $('#install'), card = target.querySelector('.install'), spot = $('#spot'), flow = $('#flow'), bar = $('#nav-bar');
-  let timer = 0;
-  function clear() { clearTimeout(timer); spot.classList.remove('on'); card.classList.remove('front'); bar.classList.remove('lit'); flow.textContent = ''; }
+  let timer = 0, pending = 0; // pending: the delayed show() or draw(), cancelled with the rest
+  function clear() { clearTimeout(timer); clearTimeout(pending); spot.classList.remove('on'); card.classList.remove('front'); bar.classList.remove('lit'); flow.textContent = ''; }
   // One path: the line, then the arrowhead, drawn as a single stroke so nothing comes apart.
   function draw(from) {
     const a = from.getBoundingClientRect(), b = card.getBoundingClientRect(), copy = card.querySelector('[data-copy]').getBoundingClientRect();
@@ -66,7 +67,7 @@ function inView(el, on, off, t = .35) { new IntersectionObserver(e => e[0].isInt
   function show(from) {
     spot.classList.add('on'); card.classList.add('front'); bar.classList.add('lit');
     // Draw once the card has finished growing, so the arrow ends where the card really is.
-    setTimeout(() => draw(from), REDUCE ? 0 : 420);
+    pending = setTimeout(() => draw(from), REDUCE ? 0 : 420);
     timer = setTimeout(clear, 5000);
   }
   document.querySelectorAll('[data-go]').forEach(el => el.addEventListener('click', e => {
@@ -75,7 +76,7 @@ function inView(el, on, off, t = .35) { new IntersectionObserver(e => e[0].isInt
     if (!inSight) target.scrollIntoView({ behavior: REDUCE ? 'auto' : 'smooth', block: 'center' });
     // The pill hides once the card is in view, so the arrow starts from the nav button then.
     const from = el.id === 'float-cta' ? $('.nav [data-go]') : el;
-    setTimeout(() => show(from), inSight || REDUCE ? 0 : 650);
+    pending = setTimeout(() => show(from), inSight || REDUCE ? 0 : 650);
   }));
   spot.addEventListener('click', clear);
   addEventListener('keydown', e => { if (e.key === 'Escape') clear(); });
@@ -93,7 +94,7 @@ function inView(el, on, off, t = .35) { new IntersectionObserver(e => e[0].isInt
 document.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('click', async () => {
   const code = btn.parentElement.querySelector('code');
   try { await navigator.clipboard.writeText(code.textContent); btn.textContent = 'Copied'; }
-  catch { const r = document.createRange(); r.selectNodeContents(code); getSelection().removeAllRanges(); getSelection().addRange(r); btn.textContent = 'Press Ctrl+C'; }
+  catch { const r = document.createRange(); r.selectNodeContents(code); getSelection().removeAllRanges(); getSelection().addRange(r); btn.textContent = MAC ? 'Press Cmd+C' : 'Press Ctrl+C'; }
   setTimeout(() => { btn.textContent = 'Copy'; }, 1800);
 }));
 
@@ -306,27 +307,31 @@ document.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('cl
 (function () {
   const ss = [...document.querySelectorAll('.app .thumb canvas')].map(c => makeSprout(c, 30, { bubble: false, settings: { bounce: .6, lookRange: 1.75 } }));
   const ST = ['needs', 'working', 'done'];
-  inView($('#where'), () => ss.forEach((s, i) => setTimeout(() => s.setState(ST[i]), i * 220)), () => ss.forEach(s => s.setState('hidden')), .25);
+  let ts = [];
+  inView($('#where'), () => { ts = ss.map((s, i) => setTimeout(() => s.setState(ST[i]), i * 220)); },
+    () => { ts.forEach(clearTimeout); ss.forEach(s => s.setState('hidden')); }, .25);
 })();
 
 // ---------- Questions: answers slide open and closed (height and fade); instant with Reduce Motion ----------
 (function () {
   document.querySelectorAll('.q').forEach(d => {
     const sum = d.querySelector('summary'), ans = d.querySelector('.ans');
-    let anim = null;
+    let anim = null, closing = false;
     sum.addEventListener('click', e => {
       if (REDUCE) return;
       e.preventDefault();
+      const from = ans.offsetHeight; // where it is now, also mid-animation (0 when closed)
       if (anim) anim.cancel();
-      if (!d.open) {
-        d.open = true;
+      if (!d.open || closing) {
+        // d.open stays true while closing, so "closing" decides: a click then opens it again.
+        closing = false; d.open = true;
         const h = ans.scrollHeight;
-        anim = ans.animate([{ height: '0px', opacity: 0 }, { height: h + 'px', opacity: 1 }], { duration: 320, easing: 'cubic-bezier(.23, 1, .32, 1)' });
+        anim = ans.animate([{ height: from + 'px', opacity: from / h }, { height: h + 'px', opacity: 1 }], { duration: 320, easing: 'cubic-bezier(.23, 1, .32, 1)' });
         anim.onfinish = () => { anim = null; };
       } else {
-        const h = ans.offsetHeight;
-        anim = ans.animate([{ height: h + 'px', opacity: 1 }, { height: '0px', opacity: 0 }], { duration: 240, easing: 'cubic-bezier(.4, 0, .2, 1)' });
-        anim.onfinish = () => { d.open = false; anim = null; };
+        closing = true;
+        anim = ans.animate([{ height: from + 'px', opacity: 1 }, { height: '0px', opacity: 0 }], { duration: 240, easing: 'cubic-bezier(.4, 0, .2, 1)' });
+        anim.onfinish = () => { d.open = false; closing = false; anim = null; };
       }
     });
   });
@@ -352,14 +357,21 @@ document.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('cl
       r[x] = Math.max(0, y + run) / h;
     }
     const m = new Float32Array(w);  // a median of 9 smooths out single bright pixels
-    for (let x = 0; x < w; x++) { const a = []; for (let k = -4; k <= 4; k++) a.push(r[Math.min(w - 1, Math.max(0, x + k))]); a.sort(); m[x] = a[4]; }
+    for (let x = 0; x < w; x++) { const a = []; for (let k = -4; k <= 4; k++) a.push(r[Math.min(w - 1, Math.max(0, x + k))]); a.sort((p, q) => p - q); m[x] = a[4]; }
     return m;
   }
-  const photo = new Promise(res => { const img = new Image(); img.onload = () => res({ img, ridge: ridgeOf(img) }); img.src = PHOTO.src; });
+  // If the photo fails to load, there is no photo, but "Blip" and its Sprout dot still appear.
+  const photo = new Promise(res => {
+    const img = new Image();
+    img.onload = () => res({ img, ridge: ridgeOf(img) }); img.onerror = () => res(null);
+    img.src = PHOTO.src;
+  });
 
   // The photo is drawn twice: behind "Blip", and in front of it cut along the hill's edge. Then "Blip" is lowered so the hill covers its foot.
   async function drawPhoto() {
-    const { img, ridge } = await photo;
+    const got = await photo;
+    if (!got) return;
+    const { img, ridge } = got;
     const W = end.clientWidth, H = end.clientHeight, dpr = Math.min(2, devicePixelRatio || 1);
     // Phones: zoom in a little and crop mostly from the bottom, so less of the dark foreground shows.
     const phone = W < 720;
@@ -397,11 +409,12 @@ document.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('cl
     while (y < H && ink(y)) y++;
     return fs * 1.1 - y; // px above the baseline
   }
-  let want = 0, settleTimer = 0;
+  let want = 0, settleTimer = 0, made = 0;
   function placeDot() {
     const fs = parseFloat(getComputedStyle(word).fontSize), size = Math.round(fs * .13), box = BlipSprout.canvasSize(size);
     Object.assign(canvas.style, { width: box.width + 'px', height: box.height + 'px', marginLeft: -box.width / 2 + 'px', top: '0px' });
-    if (!sprout) sprout = BlipSprout.create(canvas, Object.assign({ size }, APP, { handlePress: true }));
+    if (sprout && made !== size) { sprout.destroy(); sprout = null; } // a Sprout keeps the size it was made with
+    if (!sprout) { sprout = BlipSprout.create(canvas, Object.assign({ size }, APP, { handlePress: true })); made = size; }
     const sr = span.getBoundingClientRect(), cr = canvas.getBoundingClientRect(), b = sprout.bodyBox();
     want = base.getBoundingClientRect().top - sr.top - dotBottom(fs);
     canvas.style.top = (want - (b.y + b.h - cr.top)) + 'px';
