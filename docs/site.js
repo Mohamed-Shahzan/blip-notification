@@ -5,13 +5,24 @@ const REDUCE = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const $ = s => document.querySelector(s);
 const MAC = /mac|iphone|ipad/i.test((navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '');
 const wait = ms => new Promise(r => setTimeout(r, ms));
+// A group of delayed steps that can all be cancelled at once.
+function timers() {
+  const s = new Set();
+  return { later(fn, ms) { const t = setTimeout(() => { s.delete(t); fn(); }, ms); s.add(t); }, cancel() { s.forEach(clearTimeout); s.clear(); } };
+}
+// One line in a Claude chat.
+function addLine(chat, cls, html) { const el = document.createElement('div'); el.className = cls; el.innerHTML = html; chat.appendChild(el); return el; }
+// Allow and Deny greyed out once answered.
+const lockOpts = root => root.querySelectorAll('.opt').forEach(b => { b.disabled = true; b.classList.remove('pulse'); });
 // Same Sprout options as the app (app/src/main.js): bubble beside the body, the peek at 32.
 const APP = { bubbleBeside: true, handlePress: false, peekSize: 32, settings: { lookRange: 1.75 } };
-// A Sprout centred on its slot (canvas sized to Sprout, shifted left by half its width).
-function makeSprout(canvas, size, extra) {
+// A Sprout centred on its slot: the canvas is sized to Sprout and `centre` (the canvas, or its slot) shifted left by half its width.
+// Extra settings are added to the app's, not put in their place.
+function makeSprout(canvas, size, extra = {}, centre = canvas) {
   const box = BlipSprout.canvasSize(size);
-  Object.assign(canvas.style, { width: box.width + 'px', height: box.height + 'px', marginLeft: -box.width / 2 + 'px' });
-  return BlipSprout.create(canvas, Object.assign({ size }, APP, extra));
+  Object.assign(canvas.style, { width: box.width + 'px', height: box.height + 'px' });
+  centre.style.marginLeft = -box.width / 2 + 'px';
+  return BlipSprout.create(canvas, Object.assign({ size }, APP, extra, { settings: Object.assign({}, APP.settings, extra.settings) }));
 }
 // Call on() when el is at least `t` in view, and off() when it leaves.
 function inView(el, on, off, t = .35) { new IntersectionObserver(e => e[0].isIntersecting ? on() : off && off(), { threshold: t }).observe(el); }
@@ -20,7 +31,7 @@ function inView(el, on, off, t = .35) { new IntersectionObserver(e => e[0].isInt
 (function () {
   const c = $('#logo-sprout'), size = 30, box = BlipSprout.canvasSize(size);
   Object.assign(c.style, { width: box.width + 'px', height: box.height + 'px' });
-  const s = BlipSprout.create(c, { size, bubble: false, settings: { bounce: .4, lookRange: 1.75 } });
+  const s = BlipSprout.create(c, { size, bubble: false, settings: { ...APP.settings, bounce: .4 } });
   s.setState('working');
   // Head geometry from sprout.js: 75 units per size, head ry 46 and rx 40 around cy -4, drawn at 60% of the canvas height.
   const u = size / 75, cy = box.height * .6 - 4 * u, ry = 46 * u, rx = 40 * u;
@@ -36,8 +47,9 @@ function inView(el, on, off, t = .35) { new IntersectionObserver(e => e[0].isInt
 // ---------- "Get Blip" and the floating pill: dim the page, lift the install card, and draw an arrow from the button to it ----------
 (function () {
   const target = $('#install'), card = target.querySelector('.install'), spot = $('#spot'), flow = $('#flow'), bar = $('#nav-bar');
-  let timer = 0, pending = 0; // pending: the delayed show() or draw(), cancelled with the rest
-  function clear() { clearTimeout(timer); clearTimeout(pending); spot.classList.remove('on'); card.classList.remove('front'); bar.classList.remove('lit'); flow.textContent = ''; }
+  const T = timers();
+  let active = false; // true from the click until it closes, so a scroll does nothing the rest of the time
+  function clear() { if (!active) return; active = false; T.cancel(); spot.classList.remove('on'); card.classList.remove('front'); bar.classList.remove('lit'); flow.textContent = ''; }
   // One path: the line, then the arrowhead, drawn as a single stroke so nothing comes apart.
   function draw(from) {
     const a = from.getBoundingClientRect(), b = card.getBoundingClientRect(), copy = card.querySelector('[data-copy]').getBoundingClientRect();
@@ -67,16 +79,16 @@ function inView(el, on, off, t = .35) { new IntersectionObserver(e => e[0].isInt
   function show(from) {
     spot.classList.add('on'); card.classList.add('front'); bar.classList.add('lit');
     // Draw once the card has finished growing, so the arrow ends where the card really is.
-    pending = setTimeout(() => draw(from), REDUCE ? 0 : 420);
-    timer = setTimeout(clear, 5000);
+    T.later(() => draw(from), REDUCE ? 0 : 420);
+    T.later(clear, 5000);
   }
   document.querySelectorAll('[data-go]').forEach(el => el.addEventListener('click', e => {
-    e.preventDefault(); clear();
-    const r = card.getBoundingClientRect(), inSight = r.top >= 70 && r.bottom <= innerHeight;
+    e.preventDefault(); clear(); active = true;
+    const r = card.getBoundingClientRect(), inSight = r.top >= bar.offsetHeight + 4 && r.bottom <= innerHeight;
     if (!inSight) target.scrollIntoView({ behavior: REDUCE ? 'auto' : 'smooth', block: 'center' });
     // The pill hides once the card is in view, so the arrow starts from the nav button then.
     const from = el.id === 'float-cta' ? $('.nav [data-go]') : el;
-    pending = setTimeout(() => show(from), inSight || REDUCE ? 0 : 650);
+    T.later(() => show(from), inSight || REDUCE ? 0 : 650);
   }));
   spot.addEventListener('click', clear);
   addEventListener('keydown', e => { if (e.key === 'Escape') clear(); });
@@ -91,12 +103,12 @@ function inView(el, on, off, t = .35) { new IntersectionObserver(e => e[0].isInt
 })();
 
 // ---------- Copy buttons ----------
-document.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('click', async () => {
+document.querySelectorAll('[data-copy]').forEach(btn => { const T = timers(); btn.addEventListener('click', async () => {
   const code = btn.parentElement.querySelector('code');
   try { await navigator.clipboard.writeText(code.textContent); btn.textContent = 'Copied'; }
   catch { const r = document.createRange(); r.selectNodeContents(code); getSelection().removeAllRanges(); getSelection().addRange(r); btn.textContent = MAC ? 'Press Cmd+C' : 'Press Ctrl+C'; }
-  setTimeout(() => { btn.textContent = 'Copy'; }, 1800);
-}));
+  T.cancel(); T.later(() => { btn.textContent = 'Copy'; }, 1800);
+}); });
 
 // ---------- Hero playground: the real Sprout over a Claude window ----------
 // The desktop is designed at 1280 x 760 and scaled to fit as one picture.
@@ -104,48 +116,52 @@ document.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('cl
 // wide enough for Sprout's bubble on either side (x 160 to 1120, top 700 px). Everything stays in view.
 (function () {
   const fit = $('#hero-fit'), scene = $('#hero-scene'), W = 1280, H = 760, X0 = 160, X1 = 1120, Y1 = 700;
+  let fw = -1; // only a new width matters (setting the height below would call this again)
   new ResizeObserver(() => {
-    const w = fit.clientWidth, narrow = w < 700, k = narrow ? w / (X1 - X0) : w / W;
+    const w = fit.clientWidth; if (w === fw) return; fw = w;
+    const narrow = w < 700, k = narrow ? w / (X1 - X0) : w / W;
     scene.classList.toggle('narrow', narrow);
     fit.style.height = Math.round((narrow ? Y1 : H) * k) + 'px';
     scene.style.transform = narrow ? `translate(${-X0 * k}px, 0) scale(${k})` : `scale(${k})`;
   }).observe(fit);
+  // The Allow pulse and the Wi-Fi hint stop repainting while the desktop is off screen.
+  inView(fit, () => scene.classList.remove('off'), () => scene.classList.add('off'), 0);
 })();
 (function () {
   const canvas = $('#hero-sprout'), slot = $('#hero-poke'), chat = $('#hero-chat'), wifi = $('#wifi');
-  const sprout = makeSprout(canvas, 64, { compactTop: 30 });
-  // The canvas is centred inside the slot; the slot itself carries the shift.
-  slot.style.marginLeft = canvas.style.marginLeft; canvas.style.marginLeft = '0px';
+  const sprout = makeSprout(canvas, 64, { compactTop: 30 }, slot); // the slot carries the centring shift
   let run = 0, phase = 'idle', peeking = false;
-  const add = (cls, html) => { const el = document.createElement('div'); el.className = cls; el.innerHTML = html; chat.appendChild(el); return el; };
+  const add = (cls, html) => addLine(chat, cls, html);
   const alive = id => id === run;
+  // The Done and error bubbles: the x sends Sprout up to the peek, a click opens the session.
+  const bubbleActs = id => ({
+    onClose: () => { if (!alive(id)) return; peeking = true; sprout.setPeek(true); },
+    onClick: () => { if (alive(id)) opened(); }
+  });
+  // The switch under the desktop and the menu bar icon are one control.
+  const wifi2 = $('#wifi2');
+  const setWifi = on => { wifi.setAttribute('aria-checked', String(on)); wifi2.setAttribute('aria-checked', String(on)); };
 
   function doneBubble(id, recall) {
-    sprout.say(recall ? 'All done, just now. Click me to open your session' : 'All done. Click me to open your session', true, Infinity, ['billing-app'], {
-      onClose: () => { if (!alive(id)) return; peeking = true; sprout.setPeek(true); },
-      onClick: () => { if (!alive(id)) return; opened(); }
-    });
+    sprout.say(recall ? 'All done, just now. Click me to open your session' : 'All done. Click me to open your session', true, Infinity, ['billing-app'], bubbleActs(id));
   }
   function opened() {
     phase = 'end'; peeking = false; sprout.setPeek(false); sprout.setState('hidden');
     add('tool ok', 'In the app, this click opens your session. Sprout is done.');
   }
   function errorBubble(id) {
-    sprout.say('Something went wrong', true, Infinity, ['Connection lost'], {
-      onClose: () => { if (!alive(id)) return; peeking = true; sprout.setPeek(true); },
-      onClick: () => { if (!alive(id)) return; opened(); }
-    });
+    sprout.say('Something went wrong', true, Infinity, ['Connection lost'], bubbleActs(id));
   }
   function fail() {
     const id = ++run; phase = 'end';
-    chat.querySelectorAll('.opt').forEach(b => { b.disabled = true; b.classList.remove('pulse'); });
+    lockOpts(chat);
     add('err', 'Connection lost. Couldn’t reach the server.');
     sprout.setState('error'); errorBubble(id);
   }
 
   async function play() {
     const id = ++run; phase = 'working'; peeking = false;
-    chat.textContent = ''; wifi.setAttribute('aria-checked', 'true');
+    chat.textContent = ''; setWifi(true);
     sprout.setPeek(false); sprout.setState('hidden');
     await wait(400); if (!alive(id)) return;
     add('you', 'Fix the failing date test in invoice.js');
@@ -162,7 +178,7 @@ document.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('cl
   }
   async function answer(id, ok, ask) {
     if (!alive(id)) return;
-    ask.querySelectorAll('.opt').forEach(b => { b.disabled = true; b.classList.remove('pulse'); });
+    lockOpts(ask);
     if (ok && wifi.getAttribute('aria-checked') === 'false') { fail(); return; }
     if (!ok) {
       phase = 'end'; add('tool', 'Denied');
@@ -188,14 +204,11 @@ document.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('cl
     if (phase === 'done' || (phase === 'end' && sprout.state === 'error')) { opened(); return; }
     sprout.poke();
   });
-  // The switch under the desktop and the menu bar icon are one control.
-  const wifi2 = $('#wifi2');
-  new MutationObserver(() => wifi2.setAttribute('aria-checked', wifi.getAttribute('aria-checked'))).observe(wifi, { attributes: true, attributeFilter: ['aria-checked'] });
   wifi2.addEventListener('click', () => wifi.click());
   wifi.addEventListener('click', () => {
     wifi.classList.remove('hint');
     const on = wifi.getAttribute('aria-checked') !== 'true';
-    wifi.setAttribute('aria-checked', String(on));
+    setWifi(on);
     if (!on && phase === 'working') fail();
     else if (on && phase === 'end' && sprout.state === 'error') play();
   });
@@ -219,20 +232,26 @@ document.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('cl
   // Up to 1000 px the cards stack: each scene shrinks to the card's width, and the open card is the scene plus its caption.
   const stacked = matchMedia('(max-width: 1000px)');
   function sizeCards() {
-    cards.forEach(({ card, mini, cap }) => {
-      if (!stacked.matches) { mini.style.transform = ''; card.style.removeProperty('--oh'); return; }
-      const k = card.clientWidth / 760;
-      mini.style.transform = `scale(${k})`;
-      card.style.setProperty('--oh', Math.ceil(420 * k + cap.offsetHeight) + 'px');
-    });
+    if (!stacked.matches) { cards.forEach(({ card, mini }) => { mini.style.transform = ''; card.style.removeProperty('--oh'); }); return; }
+    const m = cards.map(({ card, cap }) => [card.clientWidth / 760, cap.offsetHeight]); // all reads first, then all writes
+    cards.forEach(({ card, mini }, i) => { const [k, h] = m[i]; mini.style.transform = `scale(${k})`; card.style.setProperty('--oh', Math.ceil(420 * k + h) + 'px'); });
   }
-  new ResizeObserver(sizeCards).observe($('#state-cards')); document.fonts.ready.then(sizeCards);
-  const add = (c, cls, html) => { const el = document.createElement('div'); el.className = cls; el.innerHTML = html; c.chat.appendChild(el); return el; };
+  // Only a new width matters: the open card growing changes the height, and would call this every frame.
+  let cardsW = -1;
+  new ResizeObserver(e => { const w = e[0].contentRect.width; if (w === cardsW) return; cardsW = w; sizeCards(); }).observe($('#state-cards'));
+  document.fonts.ready.then(sizeCards);
+  const add = (c, cls, html) => addLine(c.chat, cls, html);
+  // Needs you and error play the same steps with their own words: chat line class and text, bubble, bubble detail.
+  const ALERT = {
+    needs: ['ask', '<b>Claude wants to edit <code>invoice.js</code></b><div class="btns"><span class="opt">Deny</span><span class="opt main">Allow</span></div>', 'Over here! Claude needs you', 'Wants to use Edit'],
+    error: ['err', 'API Error: Connection error.', 'Something went wrong', 'API Error: Connection error.']
+  };
   const LENGTH = { working: 9900, needs: 8500, done: 9400, error: 8500 };  // ms, for the filling line
-  async function loop(c) {
+  async function loop(c, delay = 0) {
     const id = ++c.run, alive = () => id === c.run, s = c.sprout;
-    c.bar.style.transition = 'none'; c.bar.style.width = '0'; void c.bar.offsetWidth;
-    c.bar.style.transition = REDUCE ? 'none' : `width ${LENGTH[c.state]}ms linear`; c.bar.style.width = '100%';
+    if (delay) { await wait(delay); if (!alive()) return; }
+    c.bar.style.transition = 'none'; c.bar.style.transform = 'scaleX(0)'; void c.bar.offsetWidth;
+    c.bar.style.transition = REDUCE ? 'none' : `transform ${LENGTH[c.state]}ms linear`; c.bar.style.transform = 'scaleX(1)';
     c.chat.textContent = ''; s.setPeek(false); s.setState('hidden');
     add(c, 'you', 'Fix the failing date test in invoice.js');
     await wait(700); if (!alive()) return;
@@ -243,13 +262,6 @@ document.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('cl
       s.setCompact(true);
       await wait(3600); if (!alive()) return;
       s.setCompact(false);
-    } else if (c.state === 'needs') {
-      s.setState('working');
-      await wait(900); if (!alive()) return; add(c, 'tool', 'Read 2 files');
-      await wait(900); if (!alive()) return;
-      add(c, 'ask', '<b>Claude wants to edit <code>invoice.js</code></b><div class="btns"><span class="opt">Deny</span><span class="opt main">Allow</span></div>');
-      s.setState('needs'); s.say('Over here! Claude needs you', true, 5200, ['Wants to use Edit']);
-      await wait(6000); if (!alive()) return;
     } else if (c.state === 'done') {
       s.setState('working');
       await wait(800); if (!alive()) return; add(c, 'tool ok', 'Edited invoice.js');
@@ -261,22 +273,23 @@ document.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('cl
       s.setPeek(true);
       await wait(2600); if (!alive()) return;
     } else {
+      const [cls, html, line, detail] = ALERT[c.state];
       s.setState('working');
       await wait(900); if (!alive()) return; add(c, 'tool', 'Read 2 files');
       await wait(900); if (!alive()) return;
-      add(c, 'err', 'API Error: Connection error.');
-      s.setState('error'); s.say('Something went wrong', true, 5200, ['API Error: Connection error.']);
+      add(c, cls, html);
+      s.setState(c.state); s.say(line, true, 5200, [detail]);
       await wait(6000); if (!alive()) return;
     }
     if (visible && !REDUCE) open(cards[(cards.indexOf(c) + 1) % cards.length]);
   }
   function stop(c) { c.run++; c.sprout.setPeek(false); c.sprout.setState('hidden'); }
   // Closed: the card still shows its Sprout in its state, quiet (no bubble), so the row reads as a legend.
-  function rest(c) { c.run++; c.sprout.setPeek(false); c.sprout.setCompact(false); c.sprout.setState('hidden'); c.sprout.setState(c.state); }
+  function rest(c) { stop(c); c.sprout.setCompact(false); c.sprout.setState(c.state); }
   let visible = false;
   function open(c) {
     cards.forEach(o => { const on = o === c; o.card.classList.toggle('open', on); o.card.setAttribute('aria-expanded', String(on)); if (!on) { if (visible) rest(o); else stop(o); } });
-    if (visible) setTimeout(() => { if (c.card.classList.contains('open')) loop(c); }, 350);
+    if (visible) loop(c, 350);
   }
   cards.forEach(c => {
     // The cards are role="button" (a <button> may not hold the scene's boxes), so Enter and Space open them too.
@@ -294,7 +307,7 @@ document.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('cl
 // ---------- The loop video: never starts on its own (Safari blocks autoplay in Low Power Mode); a big play button starts it ----------
 (function () {
   const v = $('#loop-video'), box = v.parentElement;
-  if (matchMedia('(max-width: 600px)').matches) v.poster = v.dataset.phonePoster;
+  v.poster = matchMedia('(max-width: 600px)').matches ? v.dataset.phonePoster : v.dataset.poster; // set here, so phones fetch only theirs
   const sync = () => box.classList.toggle('playing', !v.paused);
   for (const ev of ['play', 'playing', 'pause']) v.addEventListener(ev, sync);
   sync();
@@ -305,11 +318,11 @@ document.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('cl
 
 // ---------- Works with: a small real Sprout over each app ----------
 (function () {
-  const ss = [...document.querySelectorAll('.app .thumb canvas')].map(c => makeSprout(c, 30, { bubble: false, settings: { bounce: .6, lookRange: 1.75 } }));
+  const ss = [...document.querySelectorAll('.app .thumb canvas')].map(c => makeSprout(c, 30, { bubble: false, settings: { bounce: .6 } }));
   const ST = ['needs', 'working', 'done'];
-  let ts = [];
-  inView($('#where'), () => { ts = ss.map((s, i) => setTimeout(() => s.setState(ST[i]), i * 220)); },
-    () => { ts.forEach(clearTimeout); ss.forEach(s => s.setState('hidden')); }, .25);
+  const T = timers();
+  inView($('#where'), () => ss.forEach((s, i) => T.later(() => s.setState(ST[i]), i * 220)),
+    () => { T.cancel(); ss.forEach(s => s.setState('hidden')); }, .25);
 })();
 
 // ---------- Questions: answers slide open and closed (height and fade); instant with Reduce Motion ----------
@@ -411,10 +424,10 @@ document.querySelectorAll('[data-copy]').forEach(btn => btn.addEventListener('cl
   }
   let want = 0, settleTimer = 0, made = 0;
   function placeDot() {
-    const fs = parseFloat(getComputedStyle(word).fontSize), size = Math.round(fs * .13), box = BlipSprout.canvasSize(size);
-    Object.assign(canvas.style, { width: box.width + 'px', height: box.height + 'px', marginLeft: -box.width / 2 + 'px', top: '0px' });
-    if (sprout && made !== size) { sprout.destroy(); sprout = null; } // a Sprout keeps the size it was made with
-    if (!sprout) { sprout = BlipSprout.create(canvas, Object.assign({ size }, APP, { handlePress: true })); made = size; }
+    const fs = parseFloat(getComputedStyle(word).fontSize), size = Math.round(fs * .13);
+    // A Sprout keeps the size it was made with, so a new size means a new Sprout.
+    if (made !== size) { if (sprout) sprout.destroy(); sprout = makeSprout(canvas, size, { handlePress: true }); made = size; }
+    canvas.style.top = '0px';
     const sr = span.getBoundingClientRect(), cr = canvas.getBoundingClientRect(), b = sprout.bodyBox();
     want = base.getBoundingClientRect().top - sr.top - dotBottom(fs);
     canvas.style.top = (want - (b.y + b.h - cr.top)) + 'px';
