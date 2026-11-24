@@ -6,7 +6,7 @@
 
 A small animated character, Sprout, at the top centre of your screen. It tells you when Claude Code is done, needs you, or hit an error, so you can look away while Claude works.
 
-**Status:** early preview. Works on Mac. Windows is next.
+**Status:** early preview. Works on Mac and Windows.
 
 ## What it does
 
@@ -17,14 +17,14 @@ A small animated character, Sprout, at the top centre of your screen. It tells y
 
 Everything stays on your computer.
 
-## Install (Mac)
+## Install (Mac and Windows)
 
 Open Claude Code in any folder and say:
 
 > Install Blip by following https://github.com/Mohamed-Shahzan/blip-notification/blob/main/INSTALL.md
 
-Claude explains each step and asks before it runs anything. It takes about 15 minutes, mostly the first build. To do it by hand, the same steps are in [INSTALL.md](INSTALL.md).
+Claude explains each step and asks before it runs anything. Claude checks whether you are on a Mac or Windows and follows the right steps. It takes about 15 minutes, mostly the first build, longer if Windows still needs its build tools. To do it by hand, the same steps are in [INSTALL.md](INSTALL.md).
 
-To uninstall: stop the app (press `Ctrl+C` in its Terminal window), run `claude plugin marketplace remove blip-notification`, then delete `~/blip-notification` and `~/.blip`.
+To uninstall: stop the app (press `Ctrl+C` in its Terminal or PowerShell window), run `claude plugin marketplace remove blip-notification`, then delete the `blip-notification` and `.blip` folders in your home folder.
 
 Blip and Sprout by Mohamed. Free to use, including at work. The code may not be copied into other projects, shared, sold or used for AI training. Suggested changes are welcome as pull requests. Pictures and videos of Sprout may be shared with credit (CC BY-ND 4.0). See [LICENSE](LICENSE).
