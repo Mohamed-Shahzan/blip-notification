@@ -15,6 +15,17 @@
             "timeout": 2
           }
         ]
+      },
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/check-blip.sh\"",
+            "shell": "bash",
+            "timeout": 1
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
