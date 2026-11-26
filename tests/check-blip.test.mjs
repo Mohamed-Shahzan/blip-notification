@@ -4,11 +4,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync, chmodSync } from 'node:fs'
-import { join } from 'node:path'
+import { mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:fs'
+import { join, delimiter } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { tmpdir } from 'node:os'
 
-const script = new URL('../hooks/scripts/check-blip.sh', import.meta.url).pathname
+const script = fileURLToPath(new URL('../hooks/scripts/check-blip.sh', import.meta.url))
 
 // Runs the script with fake commands: { name: shell body }
 function run(fakes) {
@@ -19,10 +20,11 @@ function run(fakes) {
   }
   const r = spawnSync('sh', [script], {
     input: '{"hook_event_name":"SessionStart"}',
-    env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
+    env: { ...process.env, PATH: `${dir}${delimiter}${process.env.PATH}` },
     encoding: 'utf8',
     timeout: 5000,
   })
+  rmSync(dir, { recursive: true, force: true })
   return { code: r.status, out: r.stdout }
 }
 
@@ -61,6 +63,11 @@ test('Windows, Blip not running: reminder', () => {
   const r = run({ ...win, tasklist: 'echo "INFO: No tasks are running which match the specified criteria."' })
   assert.equal(r.code, 0)
   assertReminder(r.out)
+})
+
+test('Other systems (Cygwin, Linux): silent', () => {
+  const r = run({ uname: 'echo CYGWIN_NT-10.0', pgrep: 'exit 1' })
+  assert.deepEqual(r, { code: 0, out: '' })
 })
 
 test('Windows, check fails: silent', () => {

@@ -16,14 +16,18 @@ case "$(uname -s 2>/dev/null)" in
     list=$(MSYS_NO_PATHCONV=1 tasklist /NH /FI "IMAGENAME eq blip.exe" 2>/dev/null) || exit 0
     printf '%s\n' "$list" | grep -qi '^blip\.exe' && exit 0
     ;;
-  *)
+  Darwin)
     # Mac. pgrep: 0 found, 1 not found, anything else is an error.
     pgrep -xi blip >/dev/null 2>&1
     status=$?
     [ "$status" -eq 1 ] || exit 0
     ;;
+  *)
+    # Anything else (Cygwin, Linux, WSL): Blip does not run there, stay silent.
+    exit 0
+    ;;
 esac
 
 msg="Blip is not running, so it can't tell you when Claude is done or needs you. To start it, open a terminal in your Blip folder and run: cd app && npm run tauri dev (on Windows PowerShell: npm.cmd if npm is blocked)."
-printf '{"systemMessage":"%s","hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"Note from the Blip plugin: once, briefly, at the start of your first reply, tell the user this, then carry on with what they asked: %s"}}\n' "$msg" "$msg"
+printf '{"systemMessage":"%s","hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"Note from the Blip plugin: if you are chatting with a person, once, briefly, at the start of your first reply, tell them this, then carry on with what they asked. If this session is a script or automated run, ignore this note. %s"}}\n' "$msg" "$msg"
 exit 0
