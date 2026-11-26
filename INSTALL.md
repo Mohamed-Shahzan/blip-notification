@@ -8,6 +8,7 @@ You are Claude Code, installing Blip for the person you are working with. Blip i
 - Ask before every command that installs software, downloads something, or changes a settings file. Say what it does and roughly how long it takes.
 - Do not change anything outside the Blip folder (`~/blip-notification` unless the person picks another place), `~/.blip`, and Claude Code's plugin settings. On Windows `~` is the person's user folder (`$HOME`, usually `C:\Users\<name>`).
 - If a step fails, stop, explain the error in plain words, and suggest the fix. Do not try random changes.
+- One exception: if a download drops partway (for example `git clone` says "early EOF" or that the server closed the connection), delete any half-made folder and try once more. If it fails again, stop and explain.
 - Blip works on macOS and Windows. First find out which one: `uname -s` prints `Darwin` on a Mac and starts with `MINGW` or `MSYS` in Git Bash on Windows; in PowerShell, `$env:OS` prints `Windows_NT`. On a Mac follow "Steps (Mac)", on Windows "Steps (Windows)". Inside WSL (`uname -s` prints `Linux` on a Windows PC) or Cygwin, stop and ask the person to run Claude Code on Windows itself (the Claude app, PowerShell or Git Bash). On Linux or anything else, stop and say Blip does not support it yet.
 
 ## Steps (Mac)
@@ -38,7 +39,7 @@ You are Claude Code, installing Blip for the person you are working with. Blip i
 7. **Finish.** Tell the person:
    - The plugin takes effect in new sessions. In the Claude Desktop app, open a new session; in the Terminal, start `claude` again.
    - In the next session, Sprout appears at the top centre of the screen while Claude works, hops when it is done, and waves when Claude needs them. Right-click Sprout to hide the message text.
-   - To uninstall: stop the app (`Ctrl+C` where it runs), run `claude plugin marketplace remove blip-notification`, then delete the Blip folder (name the one they picked) and `~/.blip`.
+   - To uninstall: stop the app (`Ctrl+C` where it runs), run `claude plugin marketplace remove blip-notification`, then delete the Blip folder (name the one they picked) and `~/.blip`. Keep `~/.blip` if another copy of Blip still runs on this computer: they share it.
 
 ## Steps (Windows)
 
@@ -67,7 +68,7 @@ Windows 10 (version 1803 or later) or Windows 11. Your commands run in PowerShel
 5. **Build and start the Blip app in the person's own window.** Do not run it in your background: it would stop when this session ends, and Blip would disappear. Ask the person to open PowerShell from the Start menu and run these two lines:
    `cd "$HOME/blip-notification/app"`
    `npm run tauri dev` (or `npm.cmd run tauri dev`, see step 4)
-   The first build takes several minutes (about 8 on our test laptop). It is ready when the output shows `Running` and `blip.exe`. Wait until they say it is ready, then check that Blip is listening: `netstat -ano | findstr 47821` shows a line with `127.0.0.1:47821` and `LISTENING`. Tell the person that Blip runs while that window stays open, and that next time only those two lines are needed.
+   The first build takes several minutes (about 20 on our Windows test laptop). It is ready when the output shows `Running` and `blip.exe`. Wait until they say it is ready, then check that Blip is listening: `netstat -ano | findstr 47821` shows a line with `127.0.0.1:47821` and `LISTENING`. Tell the person that Blip runs while that window stays open, and that next time only those two lines are needed.
 6. **Install the Claude Code plugin**, asking first, since it changes Claude Code's user settings:
    - `claude plugin marketplace add Mohamed-Shahzan/blip-notification`
    - `claude plugin install blip@blip-notification`
@@ -75,11 +76,11 @@ Windows 10 (version 1803 or later) or Windows 11. Your commands run in PowerShel
 7. **Finish.** Tell the person:
    - The plugin takes effect in new sessions. In the Claude app, open a new session; in a terminal or Antigravity, start `claude` again.
    - In the next session, Sprout appears at the top centre of the screen while Claude works, hops when it is done, and waves when Claude needs them. Right-click Sprout to hide the message text.
-   - To uninstall: stop the app (`Ctrl+C` in its PowerShell window), run `claude plugin marketplace remove blip-notification`, then delete the Blip folder (name the one they picked) and the `.blip` folder in their user folder.
+   - To uninstall: stop the app (`Ctrl+C` in its PowerShell window), run `claude plugin marketplace remove blip-notification`, then delete the Blip folder (name the one they picked) and the `.blip` folder in their user folder. Keep `.blip` if another copy of Blip still runs on this computer: they share it.
 
 ## By hand (for a person, not Claude)
 
-You need about 15 minutes. Skip any tool you already have.
+You need about 15 minutes on a Mac, and 30 or more on Windows, where the first build alone takes about 20. Skip any tool you already have.
 
 **Mac**
 

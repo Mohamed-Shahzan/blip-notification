@@ -23,7 +23,7 @@ Open Claude Code in any folder and say:
 
 > Install Blip by following https://github.com/Mohamed-Shahzan/blip-notification/blob/main/INSTALL.md
 
-Claude explains each step and asks before it runs anything. Claude checks whether you are on a Mac or Windows and follows the right steps. It takes about 15 minutes, mostly the first build, longer if Windows still needs its build tools. To do it by hand, the same steps are in [INSTALL.md](INSTALL.md).
+Claude explains each step and asks before it runs anything. Claude checks whether you are on a Mac or Windows and follows the right steps. It takes about 15 minutes on a Mac, mostly the first build. On Windows the first build alone takes about 20 minutes, longer if the build tools still need installing. To do it by hand, the same steps are in [INSTALL.md](INSTALL.md).
 
 To uninstall: stop the app (press `Ctrl+C` in its Terminal or PowerShell window), run `claude plugin marketplace remove blip-notification`, then delete the Blip folder (`blip-notification` in your home folder, unless you picked another place) and the `.blip` folder in your home folder.
 
