@@ -25,6 +25,8 @@ Open Claude Code in any folder and say:
 
 Claude explains each step and asks before it runs anything. Claude checks whether you are on a Mac or Windows and follows the right steps. It takes about 15 minutes on a Mac, mostly the first build. On Windows the first build alone takes about 20 minutes, longer if the build tools still need installing. To do it by hand, the same steps are in [INSTALL.md](INSTALL.md).
 
+After a restart, start Blip again with the same last command (Blip does not start by itself yet). Claude Code reminds you at the start of a new session when it is not running.
+
 To uninstall: stop the app (press `Ctrl+C` in its Terminal or PowerShell window), run `claude plugin marketplace remove blip-notification`, then delete the Blip folder (`blip-notification` in your home folder, unless you picked another place) and the `.blip` folder in your home folder.
 
 Blip and Sprout by Mohamed. Free to use, including at work. The code may not be copied into other projects, shared, sold or used for AI training. Suggested changes are welcome as pull requests. Pictures and videos of Sprout may be shared with credit (CC BY-ND 4.0). See [LICENSE](LICENSE).

@@ -39,6 +39,7 @@ You are Claude Code, installing Blip for the person you are working with. Blip i
 7. **Finish.** Tell the person:
    - The plugin takes effect in new sessions. In the Claude Desktop app, open a new session; in the Terminal, start `claude` again.
    - In the next session, Sprout appears at the top centre of the screen while Claude works, hops when it is done, and waves when Claude needs them. Right-click Sprout to hide the message text.
+   - Blip does not start by itself yet. After every restart, they start it again in a Terminal window with `cd ~/blip-notification/app && npm run tauri dev`. Claude Code reminds them at the start of a new session when Blip is not running.
    - To uninstall: stop the app (`Ctrl+C` where it runs), run `claude plugin marketplace remove blip-notification`, then delete the Blip folder (name the one they picked) and `~/.blip`. Keep `~/.blip` if another copy of Blip still runs on this computer: they share it.
 
 ## Steps (Windows)
@@ -76,6 +77,7 @@ Windows 10 (version 1803 or later) or Windows 11. Your commands run in PowerShel
 7. **Finish.** Tell the person:
    - The plugin takes effect in new sessions. In the Claude app, open a new session; in a terminal or Antigravity, start `claude` again.
    - In the next session, Sprout appears at the top centre of the screen while Claude works, hops when it is done, and waves when Claude needs them. Right-click Sprout to hide the message text.
+   - Blip does not start by itself yet. After every restart, they start it again in PowerShell with `cd "$HOME/blip-notification/app"`, then `npm run tauri dev` (or `npm.cmd run tauri dev`). Claude Code reminds them at the start of a new session when Blip is not running.
    - To uninstall: stop the app (`Ctrl+C` in its PowerShell window), run `claude plugin marketplace remove blip-notification`, then delete the Blip folder (name the one they picked) and the `.blip` folder in their user folder. Keep `.blip` if another copy of Blip still runs on this computer: they share it.
 
 ## By hand (for a person, not Claude)
